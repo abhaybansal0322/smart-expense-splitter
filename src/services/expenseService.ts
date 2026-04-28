@@ -1,4 +1,4 @@
-import { PoolClient } from 'pg';
+import { PoolClient } from '@neondatabase/serverless';
 import { query, withTransaction } from '@/lib/db';
 import {
   CreateExpensePayload,

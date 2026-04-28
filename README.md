@@ -15,30 +15,24 @@ A production-ready web application built to solve real-world group expense probl
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS 4, Vanilla CSS (Design system with custom animations)
-- **Database**: PostgreSQL (via `pg` node-postgres driver)
+- **Database**: PostgreSQL via Neon (`@neondatabase/serverless` driver)
 - **Validation**: Zod (for type-safe API boundaries)
 - **Components**: Modular monolith structure using server-less API route handlers.
 
 ## Getting Started
 
-### 1. Database Setup
+### 1. Database Setup (Neon)
 
-1. Install and start PostgreSQL.
-2. Create a new database:
-   ```sql
-   CREATE DATABASE expense_splitter;
-   ```
-3. Run the schema file against your new database to create tables and types:
-   ```bash
-   psql -U postgres -d expense_splitter -f schema.sql
-   ```
+1. Go to [Neon.tech](https://neon.tech/) and create a free serverless Postgres project.
+2. In the Neon Console, open the **SQL Editor**.
+3. Copy the contents of `schema.sql` from this project and run it in the Neon SQL Editor to create all tables and types.
 
 ### 2. Environment Variables
 
-Create a `.env.local` file in the root of the project (`smart-expense-splitter/.env.local`) and configure your database connection string:
+Create a `.env.local` file in the root of the project (`smart-expense-splitter/.env.local`). Copy the connection string provided by Neon (it will look like `postgresql://...`) and paste it:
 
 ```env
-DATABASE_URL=postgresql://postgres:password@localhost:5432/expense_splitter
+DATABASE_URL="postgresql://neondb_owner:password@ep-cold-shadow-123456.us-east-2.aws.neon.tech/neondb?sslmode=require"
 ```
 
 ### 3. Install & Run
