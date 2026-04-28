@@ -14,15 +14,17 @@ export async function createGroup(
     );
     const groupId = groupResult.rows[0].id;
 
-    // Upsert users by email and add to group
+    // Verify users exist by email and add to group
     for (const email of memberEmails) {
       const userResult = await client.query<{ id: string }>(
-        `INSERT INTO users (name, email)
-         VALUES ($1, $2)
-         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-         RETURNING id`,
-        [email.split('@')[0], email.toLowerCase()]
+        `SELECT id FROM users WHERE email = $1`,
+        [email.toLowerCase()]
       );
+      
+      if (userResult.rowCount === 0) {
+        throw new Error(`User with email "${email}" does not exist. All members must have an account first.`);
+      }
+      
       const userId = userResult.rows[0].id;
 
       await client.query(
@@ -97,12 +99,14 @@ export async function getGroupById(groupId: string): Promise<GroupWithDetails | 
 export async function addMemberToGroup(groupId: string, email: string): Promise<void> {
   await withTransaction(async (client) => {
     const userResult = await client.query<{ id: string }>(
-      `INSERT INTO users (name, email)
-       VALUES ($1, $2)
-       ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-       RETURNING id`,
-      [email.split('@')[0], email.toLowerCase()]
+      `SELECT id FROM users WHERE email = $1`,
+      [email.toLowerCase()]
     );
+    
+    if (userResult.rowCount === 0) {
+      throw new Error(`User with email "${email}" does not exist.`);
+    }
+    
     const userId = userResult.rows[0].id;
     await client.query(
       `INSERT INTO group_members (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,

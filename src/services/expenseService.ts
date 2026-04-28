@@ -71,6 +71,15 @@ function computeExcludeSplit(
   return computeEqualSplit(amount, included);
 }
 
+function validateSplits(amount: number, shares: Record<string, number>): void {
+  const sum = Object.values(shares).reduce((a, b) => a + b, 0);
+  if (Math.abs(sum - amount) > 0.01) {
+    const errorMsg = `Ledger integrity violation: Split sum (${sum.toFixed(2)}) does not match expense amount (${amount.toFixed(2)})`;
+    console.error(`[CRITICAL] ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+}
+
 export function computeSplits(payload: CreateExpensePayload): Record<string, number> {
   const { amount, split_type, participants, exact_amounts, percentages, excluded_users } =
     payload;
@@ -95,6 +104,7 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
 
 export async function createExpense(payload: CreateExpensePayload, userId?: string): Promise<string> {
   const shares = computeSplits(payload);
+  validateSplits(payload.amount, shares);
 
   return withTransaction(async (client: PoolClient) => {
     // Verify payer is a member of the group
@@ -231,6 +241,7 @@ export async function updateExpense(payload: import('@/lib/types').UpdateExpense
       }
 
       const shares = computeSplits(fullPayload as any);
+      validateSplits(updatedAmount, shares);
 
       await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
       

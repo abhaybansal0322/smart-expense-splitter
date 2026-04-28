@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   group_id  UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   role      VARCHAR(50) DEFAULT 'member',
+  status    VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, group_id)
 );

@@ -79,7 +79,21 @@ export function CreateGroupModal({ onClose, onCreated }: CreateGroupModalProps) 
         body: JSON.stringify({ name, description, memberEmails: emails }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create group');
+      if (!res.ok) {
+        let errorMsg = 'Failed to create group';
+        if (typeof data.error === 'string') {
+          errorMsg = data.error;
+        } else if (data.error?.fieldErrors) {
+          // Flatten field errors into a single string for simplicity in the UI
+          const errors = data.error.fieldErrors;
+          errorMsg = Object.values(errors).flat().join(', ');
+        }
+
+        if (errorMsg.toLowerCase().includes('does not exist')) {
+          throw new Error('One or more users must sign up before being added');
+        }
+        throw new Error(errorMsg);
+      }
       onCreated(data.groupId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
     }
     const groupId = await createGroup(name, description, memberEmails);
     return NextResponse.json({ groupId }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('POST /api/groups error:', error);
-    return NextResponse.json({ error: 'Failed to create group' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to create group';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
