@@ -36,50 +36,56 @@ export async function createGroup(
   });
 }
 
+// ⚡ Bolt Performance Optimization:
+// Replaced multiple LEFT JOINs to one-to-many tables with scalar subqueries.
+// The previous query caused a massive Cartesian explosion O(Members x Expenses x Settlements),
+// leading to extreme memory/CPU usage and slow response times as group activity grew.
 export async function getAllGroups(): Promise<GroupWithDetails[]> {
   const { rows } = await query<GroupWithDetails>(
     `SELECT
        g.id, g.name, g.description, g.created_at,
-       COUNT(DISTINCT gm.user_id)::int AS member_count,
-       COALESCE(SUM(e.amount), 0)::float AS total_expenses,
-       COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'pending')::int AS pending_settlements,
-       COALESCE(
-         json_agg(DISTINCT jsonb_build_object(
-           'id', u.id, 'name', u.name, 'email', u.email, 'upi_id', u.upi_id
-         )) FILTER (WHERE u.id IS NOT NULL),
-         '[]'
+       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id) AS member_count,
+       (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id) AS total_expenses,
+       (SELECT COUNT(*)::int FROM settlements WHERE group_id = g.id AND status = 'pending') AS pending_settlements,
+       (
+         SELECT COALESCE(
+           json_agg(jsonb_build_object(
+             'id', u.id, 'name', u.name, 'email', u.email, 'upi_id', u.upi_id
+           )),
+           '[]'
+         )
+         FROM group_members gm
+         JOIN users u ON u.id = gm.user_id
+         WHERE gm.group_id = g.id
        ) AS members
      FROM groups g
-     LEFT JOIN group_members gm ON gm.group_id = g.id
-     LEFT JOIN users u ON u.id = gm.user_id
-     LEFT JOIN expenses e ON e.group_id = g.id
-     LEFT JOIN settlements s ON s.group_id = g.id
-     GROUP BY g.id
      ORDER BY g.created_at DESC`
   );
   return rows;
 }
 
+// ⚡ Bolt Performance Optimization:
+// Similarly optimized by replacing Cartesian explosion joins with precise scalar subqueries.
 export async function getGroupById(groupId: string): Promise<GroupWithDetails | null> {
   const { rows } = await query<GroupWithDetails>(
     `SELECT
        g.id, g.name, g.description, g.created_at,
-       COUNT(DISTINCT gm.user_id)::int AS member_count,
-       COALESCE(SUM(e.amount), 0)::float AS total_expenses,
-       COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'pending')::int AS pending_settlements,
-       COALESCE(
-         json_agg(DISTINCT jsonb_build_object(
-           'id', u.id, 'name', u.name, 'email', u.email, 'upi_id', u.upi_id
-         )) FILTER (WHERE u.id IS NOT NULL),
-         '[]'
+       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id) AS member_count,
+       (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id) AS total_expenses,
+       (SELECT COUNT(*)::int FROM settlements WHERE group_id = g.id AND status = 'pending') AS pending_settlements,
+       (
+         SELECT COALESCE(
+           json_agg(jsonb_build_object(
+             'id', u.id, 'name', u.name, 'email', u.email, 'upi_id', u.upi_id
+           )),
+           '[]'
+         )
+         FROM group_members gm
+         JOIN users u ON u.id = gm.user_id
+         WHERE gm.group_id = g.id
        ) AS members
      FROM groups g
-     LEFT JOIN group_members gm ON gm.group_id = g.id
-     LEFT JOIN users u ON u.id = gm.user_id
-     LEFT JOIN expenses e ON e.group_id = g.id
-     LEFT JOIN settlements s ON s.group_id = g.id
-     WHERE g.id = $1
-     GROUP BY g.id`,
+     WHERE g.id = $1`,
     [groupId]
   );
   return rows[0] ?? null;
