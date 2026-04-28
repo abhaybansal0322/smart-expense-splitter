@@ -15,7 +15,7 @@ A production-ready web application built to solve real-world group expense probl
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS 4, Vanilla CSS (Design system with custom animations)
-- **Database**: PostgreSQL via Neon (`@neondatabase/serverless` driver)
+- **Database**: PostgreSQL 16+ via Neon (`@neondatabase/serverless` driver)
 - **Validation**: Zod (for type-safe API boundaries)
 - **Components**: Modular monolith structure using server-less API route handlers.
 
@@ -23,7 +23,7 @@ A production-ready web application built to solve real-world group expense probl
 
 ### 1. Database Setup (Neon)
 
-1. Go to [Neon.tech](https://neon.tech/) and create a free serverless Postgres project.
+1. Go to [Neon.tech](https://neon.tech/) and create a free serverless Postgres project (**PostgreSQL 16** is recommended).
 2. In the Neon Console, open the **SQL Editor**.
 3. Copy the contents of `schema.sql` from this project and run it in the Neon SQL Editor to create all tables and types.
 
