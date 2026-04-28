@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         );
         if (check.rowCount === 0) throw new Error('Settlement not found');
         if (check.rows[0].status !== 'pending') throw new Error('Settlement is not pending');
-        
+
         const isMember = await isUserInGroup(check.rows[0].group_id, session.user.id);
         if (!isMember) throw new Error('Forbidden: Not in group');
 
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
   try {
     const session = await getAuthSession();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    
+
     // Always use authenticated user
     const userId = session.user.id;
 

@@ -71,15 +71,6 @@ function computeExcludeSplit(
   return computeEqualSplit(amount, included);
 }
 
-function validateSplits(amount: number, shares: Record<string, number>): void {
-  const sum = Object.values(shares).reduce((a, b) => a + b, 0);
-  if (Math.abs(sum - amount) > 0.01) {
-    const errorMsg = `Ledger integrity violation: Split sum (${sum.toFixed(2)}) does not match expense amount (${amount.toFixed(2)})`;
-    console.error(`[CRITICAL] ${errorMsg}`);
-    throw new Error(errorMsg);
-  }
-}
-
 export function computeSplits(payload: CreateExpensePayload): Record<string, number> {
   const { amount, split_type, participants, exact_amounts, percentages, excluded_users } =
     payload;
@@ -104,7 +95,6 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
 
 export async function createExpense(payload: CreateExpensePayload, userId?: string): Promise<string> {
   const shares = computeSplits(payload);
-  validateSplits(payload.amount, shares);
 
   return withTransaction(async (client: PoolClient) => {
     // Verify payer is a member of the group
@@ -186,7 +176,7 @@ export async function deleteExpense(expenseId: string, groupId: string, userId?:
     const check = await client.query(`SELECT amount, description FROM expenses WHERE id = $1 AND group_id = $2`, [expenseId, groupId]);
     if (check.rowCount === 0) throw new Error('Expense not found');
     const { amount, description } = check.rows[0];
-    
+
     await client.query(`DELETE FROM expenses WHERE id = $1`, [expenseId]);
 
     if (userId) {
@@ -233,18 +223,17 @@ export async function updateExpense(payload: import('@/lib/types').UpdateExpense
         percentages: payload.percentages,
         excluded_users: payload.excluded_users,
       };
-      
+
       // If participants not provided, fetch current participants
       if (!payload.participants) {
-         const { rows: splits } = await client.query(`SELECT user_id FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
-         fullPayload.participants = splits.map(r => r.user_id);
+        const { rows: splits } = await client.query(`SELECT user_id FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
+        fullPayload.participants = splits.map(r => r.user_id);
       }
 
       const shares = computeSplits(fullPayload as any);
-      validateSplits(updatedAmount, shares);
 
       await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
-      
+
       for (const [userId, share] of Object.entries(shares)) {
         await client.query(
           `INSERT INTO expense_splits (expense_id, user_id, share) VALUES ($1, $2, $3)`,

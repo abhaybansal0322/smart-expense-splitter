@@ -39,9 +39,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     await addMemberToGroup(id, parsed.data.email);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error('PATCH /api/groups/[id] error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to add member';
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: 'Failed to add member' }, { status: 500 });
   }
 }

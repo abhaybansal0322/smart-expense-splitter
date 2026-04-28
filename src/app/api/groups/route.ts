@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     if (!memberEmails.includes(session.user.email)) {
       memberEmails.push(session.user.email);
     }
-    const groupId = await createGroup(name, description, memberEmails);
+    const groupId = await createGroup(name, description, memberEmails, session.user.email);
     return NextResponse.json({ groupId }, { status: 201 });
   } catch (error: any) {
     console.error('POST /api/groups error:', error);

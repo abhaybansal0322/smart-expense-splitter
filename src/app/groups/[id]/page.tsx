@@ -78,7 +78,7 @@ export default function GroupPage() {
     }
   }, [groupId, show]);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (groupId) fetchAll();
   }, [groupId, fetchAll]);
 
@@ -89,11 +89,7 @@ export default function GroupPage() {
   }, [tab, fetchActivity]);
 
   const handleAddMember = async () => {
-    const email = addMemberEmail.trim().toLowerCase();
-    if (!email || !email.includes('@')) {
-      show('Please enter a valid email', 'error');
-      return;
-    }
+    if (!addMemberEmail.trim()) return;
     setAddingMember(true);
     try {
       const res = await fetch(`/api/groups/${groupId}`, {
@@ -101,25 +97,12 @@ export default function GroupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: addMemberEmail }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        let errorMsg = 'Failed to add member';
-        if (typeof data.error === 'string') {
-          errorMsg = data.error;
-        } else if (data.error?.fieldErrors?.email) {
-          errorMsg = 'Invalid email format';
-        }
-
-        if (errorMsg.toLowerCase().includes('does not exist')) {
-          throw new Error('User must sign up before being added');
-        }
-        throw new Error(errorMsg);
-      }
+      if (!res.ok) throw new Error('Failed');
       setAddMemberEmail('');
       show('Member added!', 'success');
       fetchAll();
-    } catch (err) {
-      show(err instanceof Error ? err.message : 'Failed to add member', 'error');
+    } catch {
+      show('Failed to add member', 'error');
     } finally {
       setAddingMember(false);
     }
@@ -276,7 +259,7 @@ function StatPill({ label, value, highlight }: { label: string; value: string | 
   );
 }
 
-function ExpensesTab({ expenses, members, groupId, onRefresh, showToast }: { expenses: ExpenseWithDetails[]; members: User[]; groupId: string; onRefresh: () => void; showToast: (msg: string, type: 'success'|'error') => void; }) {
+function ExpensesTab({ expenses, members, groupId, onRefresh, showToast }: { expenses: ExpenseWithDetails[]; members: User[]; groupId: string; onRefresh: () => void; showToast: (msg: string, type: 'success' | 'error') => void; }) {
   const [editingExpense, setEditingExpense] = useState<ExpenseWithDetails | null>(null);
 
   if (expenses.length === 0) {
@@ -311,7 +294,7 @@ function ExpensesTab({ expenses, members, groupId, onRefresh, showToast }: { exp
   );
 }
 
-function ExpenseRow({ expense, onRefresh, showToast, onEdit }: { expense: ExpenseWithDetails; onRefresh: () => void; showToast: (msg: string, type: 'success'|'error') => void; onEdit: () => void }) {
+function ExpenseRow({ expense, onRefresh, showToast, onEdit }: { expense: ExpenseWithDetails; onRefresh: () => void; showToast: (msg: string, type: 'success' | 'error') => void; onEdit: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -532,28 +515,20 @@ function MembersTab({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {members.map((m) => {
-          const isPending = false; // Prepare for invitations: logic to be implemented with backend update
-          return (
-            <div key={m.id} className="glass-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <Avatar name={m.name} size={44} />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{m.name}</div>
-                  {isPending && (
-                    <span className="badge badge-yellow" style={{ fontSize: 10 }}>Invite Pending</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{m.email}</div>
-              </div>
-              {m.upi_id && !isPending && (
-                <span className="badge badge-green" style={{ fontSize: 11 }}>
-                  UPI ✓
-                </span>
-              )}
+        {members.map((m) => (
+          <div key={m.id} className="glass-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+            <Avatar name={m.name} size={44} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{m.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{m.email}</div>
             </div>
-          );
-        })}
+            {m.upi_id && (
+              <span className="badge badge-green" style={{ fontSize: 11 }}>
+                UPI ✓
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -607,7 +582,7 @@ function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boo
 
   const renderActivityText = (a: Activity) => {
     const userName = <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.user.name}</span>;
-    
+
     switch (a.action) {
       case 'EXPENSE_CREATED':
         return (
@@ -668,7 +643,7 @@ function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boo
             }} />
 
             <Avatar name={a.user.name} size={32} />
-            
+
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
                 {renderActivityText(a)}

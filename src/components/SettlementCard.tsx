@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useToast } from './Toast';
 import { SettlementTransaction } from '@/lib/types';
 import { Avatar } from './GroupComponents';
 
@@ -16,7 +15,6 @@ export function SettlementCard({ transaction, groupId, onConfirmed }: Settlement
   const [showQr, setShowQr] = useState(false);
   const [reference, setReference] = useState('');
   const [confirmed, setConfirmed] = useState(false);
-  const { show, ToastContainer } = useToast();
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -33,7 +31,7 @@ export function SettlementCard({ transaction, groupId, onConfirmed }: Settlement
         }),
       });
       const created = await createRes.json();
-      if (!createRes.ok) throw new Error(created.error || 'Failed to initiate settlement');
+      if (!createRes.ok) throw new Error(created.error);
 
       const confirmRes = await fetch('/api/settlements', {
         method: 'POST',
@@ -43,13 +41,12 @@ export function SettlementCard({ transaction, groupId, onConfirmed }: Settlement
           upi_reference: reference || undefined,
         }),
       });
-      if (!confirmRes.ok) throw new Error('Failed to confirm settlement');
+      if (!confirmRes.ok) throw new Error('Failed to confirm');
 
       setConfirmed(true);
       onConfirmed();
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      show(err.message || 'Settlement failed', 'error');
     } finally {
       setLoading(false);
     }
@@ -70,7 +67,6 @@ export function SettlementCard({ transaction, groupId, onConfirmed }: Settlement
         <span style={{ fontSize: 14, color: 'var(--accent-success)', fontWeight: 500 }}>
           {transaction.from_name} paid ₹{transaction.amount.toFixed(2)} to {transaction.to_name} — Settled!
         </span>
-        <ToastContainer />
       </div>
     );
   }
@@ -177,14 +173,12 @@ export function SettlementCard({ transaction, groupId, onConfirmed }: Settlement
               color: 'var(--text-muted)',
               fontFamily: 'monospace',
               wordBreak: 'break-all',
-              whiteSpace: 'pre-wrap',
             }}>
               {transaction.upi_link}
             </div>
           </div>
         </div>
       )}
-      <ToastContainer />
     </div>
   );
 }
