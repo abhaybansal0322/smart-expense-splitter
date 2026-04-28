@@ -29,10 +29,18 @@ A production-ready web application built to solve real-world group expense probl
 
 ### 2. Environment Variables
 
-Create a `.env.local` file in the root of the project (`smart-expense-splitter/.env.local`). Copy the connection string provided by Neon (it will look like `postgresql://...`) and paste it:
+Create a `.env.local` file in the root of the project (`smart-expense-splitter/.env.local`). 
+
+**To get your Neon connection string:**
+1. On your Neon Project Dashboard, navigate to the **Connection Details** widget.
+2. Ensure you have selected your desired branch (e.g., `main`), database, and role.
+3. Check the **Pooled connection** checkbox (highly recommended for Next.js serverless API routes to prevent exhausting database connections).
+4. Click the copy icon.
+
+Paste the copied URL into your `.env.local` file. It must include `?sslmode=require` at the end:
 
 ```env
-DATABASE_URL="postgresql://neondb_owner:password@ep-cold-shadow-123456.us-east-2.aws.neon.tech/neondb?sslmode=require"
+DATABASE_URL="postgresql://neondb_owner:password@ep-cold-shadow-123456-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
 ```
 
 ### 3. Install & Run
