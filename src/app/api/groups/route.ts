@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createGroup, getAllGroups } from '@/services/groupService';
+import { createGroup, getGroupsForUser } from '@/services/groupService';
+import { getAuthSession } from '@/lib/auth';
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1).max(255),
@@ -10,7 +11,11 @@ const CreateGroupSchema = z.object({
 
 export async function GET() {
   try {
-    const groups = await getAllGroups();
+    const session = await getAuthSession();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const groups = await getGroupsForUser(session.user.id);
     return NextResponse.json({ groups });
   } catch (error) {
     console.error('GET /api/groups error:', error);
@@ -20,6 +25,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getAuthSession();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const body = await req.json();
     const parsed = CreateGroupSchema.safeParse(body);
     if (!parsed.success) {
@@ -27,6 +36,13 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, description, memberEmails } = parsed.data;
+    // ensure current user is in the group
+    if (!session.user.email) {
+      return NextResponse.json({ error: 'User email not found in session' }, { status: 400 });
+    }
+    if (!memberEmails.includes(session.user.email)) {
+      memberEmails.push(session.user.email);
+    }
     const groupId = await createGroup(name, description, memberEmails);
     return NextResponse.json({ groupId }, { status: 201 });
   } catch (error) {

@@ -7,9 +7,9 @@ import { Avatar } from '@/components/GroupComponents';
 import { AddExpenseModal } from '@/components/AddExpenseModal';
 import { SettlementCard } from '@/components/SettlementCard';
 import { useToast } from '@/components/Toast';
-import { GroupWithDetails, ExpenseWithDetails, UserBalance, SettlementTransaction } from '@/lib/types';
+import { GroupWithDetails, ExpenseWithDetails, UserBalance, SettlementTransaction, User, Activity } from '@/lib/types';
 
-type Tab = 'expenses' | 'balances' | 'settlements' | 'members';
+type Tab = 'expenses' | 'balances' | 'settlements' | 'members' | 'activity';
 
 const SPLIT_TYPE_LABELS: Record<string, string> = {
   equal: 'Equal',
@@ -27,14 +27,17 @@ export default function GroupPage() {
   const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([]);
   const [balances, setBalances] = useState<UserBalance[]>([]);
   const [settlements, setSettlements] = useState<SettlementTransaction[]>([]);
+  const [activity, setActivity] = useState<Activity[]>([]);
   const [tab, setTab] = useState<Tab>('expenses');
   const [loading, setLoading] = useState(true);
+  const [fetchingActivity, setFetchingActivity] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [addMemberEmail, setAddMemberEmail] = useState('');
   const [addingMember, setAddingMember] = useState(false);
   const { show, ToastContainer } = useToast();
 
   const fetchAll = useCallback(async () => {
+    console.log("fetchAll triggered", { groupId });
     try {
       const [groupRes, expRes, balRes, setRes] = await Promise.all([
         fetch(`/api/groups/${groupId}`),
@@ -50,14 +53,40 @@ export default function GroupPage() {
       setExpenses(ed.expenses ?? []);
       setBalances(bd.balances ?? []);
       setSettlements(sd.plan ?? []);
-    } catch {
+    } catch (err) {
+      console.error("fetchAll error", err);
       show('Failed to load group data', 'error');
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, show, router]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const fetchActivity = useCallback(async () => {
+    console.log("fetchActivity triggered", { groupId });
+    setFetchingActivity(true);
+    try {
+      const res = await fetch(`/api/groups/${groupId}/activity`);
+      const data = await res.json();
+      if (res.ok) {
+        setActivity(data.activity ?? []);
+      }
+    } catch (err) {
+      console.error("fetchActivity error", err);
+      show('Failed to load activity', 'error');
+    } finally {
+      setFetchingActivity(false);
+    }
+  }, [groupId, show]);
+
+  useEffect(() => { 
+    if (groupId) fetchAll();
+  }, [groupId, fetchAll]);
+
+  useEffect(() => {
+    if (tab === 'activity') {
+      fetchActivity();
+    }
+  }, [tab, fetchActivity]);
 
   const handleAddMember = async () => {
     if (!addMemberEmail.trim()) return;
@@ -102,6 +131,7 @@ export default function GroupPage() {
     { id: 'balances', label: 'Balances', count: balances.length },
     { id: 'settlements', label: 'Settle Up', count: settlements.length },
     { id: 'members', label: 'Members', count: members.length },
+    { id: 'activity', label: 'Activity' },
   ];
 
   return (
@@ -170,7 +200,7 @@ export default function GroupPage() {
         {/* Tab Content */}
         <div className="animate-fade-in" key={tab}>
           {tab === 'expenses' && (
-            <ExpensesTab expenses={expenses} onRefresh={fetchAll} />
+            <ExpensesTab expenses={expenses} members={members} groupId={groupId} onRefresh={fetchAll} showToast={show} />
           )}
           {tab === 'balances' && (
             <BalancesTab balances={balances} />
@@ -186,6 +216,9 @@ export default function GroupPage() {
               onAddMember={handleAddMember}
               addingMember={addingMember}
             />
+          )}
+          {tab === 'activity' && (
+            <ActivityTab activity={activity} loading={fetchingActivity} />
           )}
         </div>
       </main>
@@ -226,7 +259,9 @@ function StatPill({ label, value, highlight }: { label: string; value: string | 
   );
 }
 
-function ExpensesTab({ expenses, onRefresh }: { expenses: ExpenseWithDetails[]; onRefresh: () => void }) {
+function ExpensesTab({ expenses, members, groupId, onRefresh, showToast }: { expenses: ExpenseWithDetails[]; members: User[]; groupId: string; onRefresh: () => void; showToast: (msg: string, type: 'success'|'error') => void; }) {
+  const [editingExpense, setEditingExpense] = useState<ExpenseWithDetails | null>(null);
+
   if (expenses.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--text-muted)' }}>
@@ -236,26 +271,47 @@ function ExpensesTab({ expenses, onRefresh }: { expenses: ExpenseWithDetails[]; 
     );
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {expenses.map((exp) => (
-        <ExpenseRow key={exp.id} expense={exp} onRefresh={onRefresh} />
-      ))}
-    </div>
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {expenses.map((exp) => (
+          <ExpenseRow key={exp.id} expense={exp} onRefresh={onRefresh} showToast={showToast} onEdit={() => setEditingExpense(exp)} />
+        ))}
+      </div>
+      {editingExpense && (
+        <AddExpenseModal
+          groupId={groupId}
+          members={members}
+          initialExpense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onCreated={() => {
+            setEditingExpense(null);
+            showToast('Expense updated!', 'success');
+            onRefresh();
+          }}
+        />
+      )}
+    </>
   );
 }
 
-function ExpenseRow({ expense, onRefresh }: { expense: ExpenseWithDetails; onRefresh: () => void }) {
+function ExpenseRow({ expense, onRefresh, showToast, onEdit }: { expense: ExpenseWithDetails; onRefresh: () => void; showToast: (msg: string, type: 'success'|'error') => void; onEdit: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async () => {
-    if (!confirm('Delete this expense? This cannot be undone.')) return;
     setDeleting(true);
     try {
-      // Not implemented in route yet — would DELETE /api/expenses/[id]
+      const res = await fetch(`/api/expenses/${expense.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete expense');
+      showToast('Expense deleted', 'success');
       onRefresh();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete expense', 'error');
     } finally {
       setDeleting(false);
+      setShowConfirm(false);
     }
   };
 
@@ -297,9 +353,15 @@ function ExpenseRow({ expense, onRefresh }: { expense: ExpenseWithDetails; onRef
       {expanded && (
         <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border)' }}>
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Split Breakdown
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                Split Breakdown
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={onEdit} className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }}>Edit</button>
+                <button onClick={() => setShowConfirm(true)} className="btn-danger" style={{ padding: '4px 10px', fontSize: 12, background: 'rgba(248, 113, 113, 0.1)' }}>Delete</button>
+              </div>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {splits.map((split) => (
                 <div key={split.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
@@ -310,6 +372,25 @@ function ExpenseRow({ expense, onRefresh }: { expense: ExpenseWithDetails; onRef
                   <span style={{ fontWeight: 600, fontSize: 14 }}>₹{Number(split.share).toFixed(2)}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirm && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !deleting && setShowConfirm(false)}>
+          <div className="modal-content" style={{ maxWidth: 400, padding: 24, textAlign: 'center' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Delete Expense?</h3>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
+              Are you sure you want to delete this expense? This action cannot be undone and will affect everyone's balances.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button className="btn-secondary" onClick={() => setShowConfirm(false)} disabled={deleting} style={{ flex: 1, justifyContent: 'center' }}>
+                Cancel
+              </button>
+              <button className="btn-danger" onClick={handleDelete} disabled={deleting} style={{ flex: 1, justifyContent: 'center', background: 'rgba(248, 113, 113, 0.15)' }}>
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>
@@ -446,6 +527,131 @@ function MembersTab({
                 UPI ✓
               </span>
             )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="glass-card" style={{ padding: '16px 20px', display: 'flex', gap: 16, alignItems: 'center' }}>
+            <div className="skeleton" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton" style={{ height: 16, width: '60%', marginBottom: 8 }} />
+              <div className="skeleton" style={{ height: 12, width: '30%' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (activity.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--text-muted)' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>📜</div>
+        <p>No activity yet in this group.</p>
+      </div>
+    );
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const getRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 86400 * 7) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  };
+
+  const renderActivityText = (a: Activity) => {
+    const userName = <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.user.name}</span>;
+    
+    switch (a.action) {
+      case 'EXPENSE_CREATED':
+        return (
+          <>
+            {userName} added {a.metadata.description} <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatCurrency(a.metadata.amount)}</span>
+          </>
+        );
+      case 'EXPENSE_UPDATED':
+        return (
+          <>
+            {userName} updated expense from <span style={{ color: 'var(--text-muted)', textDecoration: 'line-through' }}>{formatCurrency(a.metadata.old_amount)}</span> → <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatCurrency(a.metadata.new_amount)}</span>
+          </>
+        );
+      case 'EXPENSE_DELETED':
+        return (
+          <>
+            {userName} deleted {a.metadata.description} ({formatCurrency(a.metadata.amount)})
+          </>
+        );
+      case 'SETTLEMENT_CREATED':
+        return (
+          <>
+            {userName} paid <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>{formatCurrency(a.metadata.amount)}</span>
+          </>
+        );
+      default:
+        return `${a.user.name} performed an action`;
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', paddingLeft: 20 }}>
+      {/* Vertical line */}
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 2,
+        background: 'var(--border)',
+        marginLeft: 9
+      }} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {activity.map((a) => (
+          <div key={a.id} style={{ position: 'relative', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            {/* Timeline dot */}
+            <div style={{
+              position: 'absolute',
+              left: -20,
+              top: 6,
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: 'var(--accent-primary)',
+              border: '2px solid var(--bg-primary)',
+              zIndex: 1
+            }} />
+
+            <Avatar name={a.user.name} size={32} />
+            
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                {renderActivityText(a)}
+              </p>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+                {getRelativeTime(a.created_at)}
+              </span>
+            </div>
           </div>
         ))}
       </div>

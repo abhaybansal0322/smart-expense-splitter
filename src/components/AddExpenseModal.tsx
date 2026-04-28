@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { User, SplitType } from '@/lib/types';
+import { User, SplitType, ExpenseWithDetails } from '@/lib/types';
 
 interface AddExpenseModalProps {
   groupId: string;
   members: User[];
   onClose: () => void;
   onCreated: () => void;
+  initialExpense?: ExpenseWithDetails;
 }
 
 const SPLIT_TYPES: { value: SplitType; label: string; desc: string }[] = [
@@ -17,15 +18,50 @@ const SPLIT_TYPES: { value: SplitType; label: string; desc: string }[] = [
   { value: 'exclude',    label: 'Exclude',    desc: 'Exclude specific users' },
 ];
 
-export function AddExpenseModal({ groupId, members, onClose, onCreated }: AddExpenseModalProps) {
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidBy, setPaidBy] = useState(members[0]?.id ?? '');
-  const [splitType, setSplitType] = useState<SplitType>('equal');
-  const [participants, setParticipants] = useState<string[]>(members.map((m) => m.id));
-  const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
-  const [percentages, setPercentages] = useState<Record<string, string>>({});
-  const [excludedUsers, setExcludedUsers] = useState<string[]>([]);
+export function AddExpenseModal({ groupId, members, onClose, onCreated, initialExpense }: AddExpenseModalProps) {
+  const [description, setDescription] = useState(initialExpense?.description ?? '');
+  const [amount, setAmount] = useState(initialExpense ? String(initialExpense.amount) : '');
+  const [paidBy, setPaidBy] = useState(initialExpense?.paid_by ?? members[0]?.id ?? '');
+  const [splitType, setSplitType] = useState<SplitType>(initialExpense?.split_type ?? 'equal');
+  
+  const [participants, setParticipants] = useState<string[]>(
+    initialExpense 
+      ? initialExpense.splits.map(s => s.user_id) 
+      : members.map((m) => m.id)
+  );
+
+  const [exactAmounts, setExactAmounts] = useState<Record<string, string>>(() => {
+    if (initialExpense?.split_type === 'exact') {
+      const map: Record<string, string> = {};
+      initialExpense.splits.forEach(s => {
+        map[s.user_id] = String(s.share);
+      });
+      return map;
+    }
+    return {};
+  });
+
+  const [percentages, setPercentages] = useState<Record<string, string>>(() => {
+    if (initialExpense?.split_type === 'percentage') {
+      const map: Record<string, string> = {};
+      const total = Number(initialExpense.amount);
+      if (total > 0) {
+        initialExpense.splits.forEach(s => {
+          map[s.user_id] = String(((Number(s.share) / total) * 100).toFixed(2));
+        });
+      }
+      return map;
+    }
+    return {};
+  });
+
+  const [excludedUsers, setExcludedUsers] = useState<string[]>(() => {
+    if (initialExpense?.split_type === 'exclude') {
+      const pIds = initialExpense.splits.map(s => s.user_id);
+      return members.map(m => m.id).filter(id => !pIds.includes(id));
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -79,13 +115,15 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated }: AddExp
 
     setLoading(true);
     try {
-      const res = await fetch('/api/expenses', {
-        method: 'POST',
+      const url = initialExpense ? `/api/expenses/${initialExpense.id}` : '/api/expenses';
+      const method = initialExpense ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Failed to add expense');
+      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : (initialExpense ? 'Failed to update expense' : 'Failed to add expense'));
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -99,8 +137,8 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated }: AddExp
       <div className="modal-content" style={{ maxWidth: 560 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700 }}>Add Expense</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>Track a shared cost</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700 }}>{initialExpense ? 'Edit Expense' : 'Add Expense'}</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>{initialExpense ? 'Modify shared cost' : 'Track a shared cost'}</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 20 }}>✕</button>
         </div>
@@ -261,7 +299,7 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated }: AddExp
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <button className="btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
             <button className="btn-primary" onClick={handleSubmit} disabled={loading} style={{ flex: 2 }}>
-              {loading ? '⏳ Saving...' : '+ Add Expense'}
+              {loading ? '⏳ Saving...' : (initialExpense ? 'Save Changes' : '+ Add Expense')}
             </button>
           </div>
         </div>

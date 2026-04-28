@@ -10,6 +10,7 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
+  secret: process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: '/login', // Optional: customize the login page
   },
@@ -30,19 +31,21 @@ export const authOptions: NextAuthOptions = {
         }
 
         const res = await query<any>(
-          'SELECT id, name, email, password FROM users WHERE email = $1',
+          'SELECT id, name, email, password, password_hash FROM users WHERE email = $1',
           [credentials.email]
         );
 
         const user = res.rows[0];
 
-        if (!user || !user.password) {
+        const storedPassword = user?.password_hash || user?.password;
+
+        if (!user || !storedPassword) {
           throw new Error('User not found or using another login method');
         }
 
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
-          user.password
+          storedPassword
         );
 
         if (!isPasswordValid) {

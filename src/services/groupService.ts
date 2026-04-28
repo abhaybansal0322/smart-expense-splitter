@@ -40,7 +40,7 @@ export async function createGroup(
 // Replaced multiple LEFT JOINs to one-to-many tables with scalar subqueries.
 // The previous query caused a massive Cartesian explosion O(Members x Expenses x Settlements),
 // leading to extreme memory/CPU usage and slow response times as group activity grew.
-export async function getAllGroups(): Promise<GroupWithDetails[]> {
+export async function getGroupsForUser(userId: string): Promise<GroupWithDetails[]> {
   const { rows } = await query<GroupWithDetails>(
     `SELECT
        g.id, g.name, g.description, g.created_at,
@@ -59,7 +59,10 @@ export async function getAllGroups(): Promise<GroupWithDetails[]> {
          WHERE gm.group_id = g.id
        ) AS members
      FROM groups g
-     ORDER BY g.created_at DESC`
+     JOIN group_members gm_filter ON gm_filter.group_id = g.id
+     WHERE gm_filter.user_id = $1
+     ORDER BY g.created_at DESC`,
+    [userId]
   );
   return rows;
 }
@@ -122,4 +125,12 @@ export async function getGroupMembers(groupId: string): Promise<User[]> {
 
 export async function updateUserUpi(userId: string, upiId: string): Promise<void> {
   await query(`UPDATE users SET upi_id = $1 WHERE id = $2`, [upiId, userId]);
+}
+
+export async function isUserInGroup(groupId: string, userId: string): Promise<boolean> {
+  const { rowCount } = await query(
+    `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    [groupId, userId]
+  );
+  return (rowCount ?? 0) > 0;
 }

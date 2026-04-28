@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSettlementPlan } from '@/services/settlementService';
+import { isUserInGroup } from '@/services/groupService';
+import { getAuthSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 
 type Params = { params: Promise<{ id: string }> };
@@ -7,6 +9,12 @@ type Params = { params: Promise<{ id: string }> };
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
   try {
+    const session = await getAuthSession();
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const isMember = await isUserInGroup(id, session.user.id);
+    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const [plan, { rows: saved }] = await Promise.all([
       getSettlementPlan(id),
       query(

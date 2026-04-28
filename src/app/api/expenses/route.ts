@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createExpense } from '@/services/expenseService';
+import { isUserInGroup } from '@/services/groupService';
+import { getAuthSession } from '@/lib/auth';
 import { SplitType } from '@/lib/types';
 
 const CreateExpenseSchema = z.object({
@@ -23,7 +25,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const expenseId = await createExpense(parsed.data);
+    const session = await getAuthSession();
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const isMember = await isUserInGroup(parsed.data.group_id, session.user.id);
+    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    const expenseId = await createExpense(parsed.data, session.user.id);
     return NextResponse.json({ expenseId }, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

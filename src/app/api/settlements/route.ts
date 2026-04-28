@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { query, withTransaction } from '@/lib/db';
+import { getAuthSession } from '@/lib/auth';
+import { logActivity } from '@/services/activityService';
+import { isUserInGroup } from '@/services/groupService';
 
 const ConfirmSchema = z.object({
   settlement_id: z.string().uuid(),
@@ -17,6 +20,9 @@ const CreateSettlementSchema = z.object({
 // POST: Create or confirm a settlement
 export async function POST(req: NextRequest) {
   try {
+    const session = await getAuthSession();
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const body = await req.json();
 
     // Confirm existing settlement
@@ -28,11 +34,14 @@ export async function POST(req: NextRequest) {
 
       await withTransaction(async (client) => {
         const check = await client.query(
-          `SELECT id, status FROM settlements WHERE id = $1 FOR UPDATE`,
+          `SELECT id, status, group_id FROM settlements WHERE id = $1 FOR UPDATE`,
           [parsed.data.settlement_id]
         );
         if (check.rowCount === 0) throw new Error('Settlement not found');
         if (check.rows[0].status !== 'pending') throw new Error('Settlement is not pending');
+        
+        const isMember = await isUserInGroup(check.rows[0].group_id, session.user.id);
+        if (!isMember) throw new Error('Forbidden: Not in group');
 
         await client.query(
           `UPDATE settlements
@@ -52,6 +61,9 @@ export async function POST(req: NextRequest) {
     }
 
     const { group_id, from_user, to_user, amount } = parsed.data;
+    const isMember = await isUserInGroup(group_id, session.user.id);
+    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const result = await query<{ id: string }>(
       `INSERT INTO settlements (group_id, from_user, to_user, amount, status)
        VALUES ($1, $2, $3, $4, 'pending')
@@ -59,18 +71,37 @@ export async function POST(req: NextRequest) {
       [group_id, from_user, to_user, amount]
     );
 
-    return NextResponse.json({ settlement_id: result.rows[0].id }, { status: 201 });
+    const settlementId = result.rows[0].id;
+    await logActivity({
+      userId: session.user.id,
+      groupId: group_id,
+      action: 'SETTLEMENT_CREATED',
+      entityType: 'settlement',
+      entityId: settlementId,
+      metadata: {
+        amount,
+        from_user,
+        to_user
+      }
+    });
+
+    return NextResponse.json({ settlement_id: settlementId }, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('POST /api/settlements error:', msg);
+    if (msg.includes('Forbidden')) return NextResponse.json({ error: msg }, { status: 403 });
+    if (msg === 'Settlement not found') return NextResponse.json({ error: msg }, { status: 404 });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('user_id');
+    const session = await getAuthSession();
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    
+    // Always use authenticated user
+    const userId = session.user.id;
 
     const { rows } = await query(
       `SELECT s.id, s.group_id, s.from_user, s.to_user, s.amount::float, s.status,

@@ -4,6 +4,7 @@ export interface User {
   name: string;
   email: string;
   upi_id?: string;
+  avatar_url?: string;
   created_at: string;
 }
 
@@ -64,6 +65,7 @@ export interface CreateExpensePayload {
   paid_by: string; // user_id
   amount: number;
   description: string;
+  category?: string;
   split_type: SplitType;
   participants: string[]; // user_ids
   // For 'exact' splits: map of user_id -> amount
@@ -72,6 +74,10 @@ export interface CreateExpensePayload {
   percentages?: Record<string, number>;
   // For 'exclude' splits: user_ids to exclude
   excluded_users?: string[];
+}
+
+export interface UpdateExpensePayload extends Partial<CreateExpensePayload> {
+  expense_id: string;
 }
 
 export interface ConfirmSettlementPayload {
@@ -108,6 +114,18 @@ export interface GroupWithDetails extends Group {
 export interface ExpenseWithDetails extends Expense {
   paid_by_name: string;
   splits: Array<ExpenseSplit & { user_name: string }>;
+}
+
+export interface Activity {
+  id: string;
+  action: 'EXPENSE_CREATED' | 'EXPENSE_UPDATED' | 'EXPENSE_DELETED' | 'SETTLEMENT_CREATED';
+  entity_type: 'expense' | 'settlement';
+  metadata: any;
+  created_at: string;
+  user: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface PendingDue {

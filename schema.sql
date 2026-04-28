@@ -6,12 +6,14 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ─────────────── Users ───────────────
 CREATE TABLE IF NOT EXISTS users (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        VARCHAR(255) NOT NULL,
-  email       VARCHAR(320) NOT NULL UNIQUE,
-  password    VARCHAR(255),
-  upi_id      VARCHAR(255),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          VARCHAR(255) NOT NULL,
+  email         VARCHAR(320) NOT NULL UNIQUE,
+  password      VARCHAR(255),
+  password_hash VARCHAR(255),
+  avatar_url    TEXT,
+  upi_id        TEXT,
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- ─────────────── Groups ───────────────
@@ -26,12 +28,17 @@ CREATE TABLE IF NOT EXISTS groups (
 CREATE TABLE IF NOT EXISTS group_members (
   user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   group_id  UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  role      VARCHAR(50) DEFAULT 'member',
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, group_id)
 );
 
 -- ─────────────── Expenses ───────────────
-CREATE TYPE split_type AS ENUM ('equal', 'exact', 'percentage', 'exclude');
+DO $$ BEGIN
+    CREATE TYPE split_type AS ENUM ('equal', 'exact', 'percentage', 'exclude');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS expenses (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -39,6 +46,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   paid_by     UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   amount      NUMERIC(12,2) NOT NULL CHECK (amount > 0),
   description VARCHAR(500) NOT NULL,
+  category    VARCHAR(100),
   split_type  split_type NOT NULL DEFAULT 'equal',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -53,7 +61,11 @@ CREATE TABLE IF NOT EXISTS expense_splits (
 );
 
 -- ─────────────── Settlements ───────────────
-CREATE TYPE settlement_status AS ENUM ('pending', 'confirmed', 'cancelled');
+DO $$ BEGIN
+    CREATE TYPE settlement_status AS ENUM ('pending', 'confirmed', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS settlements (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -68,6 +80,19 @@ CREATE TABLE IF NOT EXISTS settlements (
   CHECK (from_user <> to_user)
 );
 
+-- ─────────────── Activity Logs ───────────────
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id    UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action      VARCHAR(50) NOT NULL,
+  entity_type VARCHAR(50) NOT NULL,
+  entity_id   UUID NOT NULL,
+  metadata    JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
 -- ─────────────── Indexes ───────────────
 CREATE INDEX IF NOT EXISTS idx_group_members_group    ON group_members(group_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_user     ON group_members(user_id);
@@ -79,9 +104,13 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group      ON settlements(group_id);
 CREATE INDEX IF NOT EXISTS idx_settlements_from_user  ON settlements(from_user);
 CREATE INDEX IF NOT EXISTS idx_settlements_to_user    ON settlements(to_user);
 CREATE INDEX IF NOT EXISTS idx_settlements_status     ON settlements(status);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_group    ON activity_logs(group_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created  ON activity_logs(created_at DESC);
+
 
 -- ─────────────── Seed Data (optional) ───────────────
 -- INSERT INTO users (name, email, upi_id) VALUES
 --   ('Alice',   'alice@example.com',   'alice@upi'),
 --   ('Bob',     'bob@example.com',     'bob@upi'),
 --   ('Charlie', 'charlie@example.com', 'charlie@upi');
+

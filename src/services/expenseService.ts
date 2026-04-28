@@ -1,5 +1,6 @@
 import { PoolClient } from '@neondatabase/serverless';
 import { query, withTransaction } from '@/lib/db';
+import { logActivity } from '@/services/activityService';
 import {
   CreateExpensePayload,
   ExpenseWithDetails,
@@ -92,7 +93,7 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
 
 // ─────────────── Service Functions ───────────────
 
-export async function createExpense(payload: CreateExpensePayload): Promise<string> {
+export async function createExpense(payload: CreateExpensePayload, userId?: string): Promise<string> {
   const shares = computeSplits(payload);
 
   return withTransaction(async (client: PoolClient) => {
@@ -107,10 +108,10 @@ export async function createExpense(payload: CreateExpensePayload): Promise<stri
 
     // Insert expense
     const expResult = await client.query<{ id: string }>(
-      `INSERT INTO expenses (group_id, paid_by, amount, description, split_type)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO expenses (group_id, paid_by, amount, description, category, split_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [payload.group_id, payload.paid_by, payload.amount, payload.description, payload.split_type]
+      [payload.group_id, payload.paid_by, payload.amount, payload.description, payload.category, payload.split_type]
     );
     const expenseId = expResult.rows[0].id;
 
@@ -122,6 +123,20 @@ export async function createExpense(payload: CreateExpensePayload): Promise<stri
          ON CONFLICT (expense_id, user_id) DO UPDATE SET share = EXCLUDED.share`,
         [expenseId, userId, share]
       );
+    }
+
+    if (userId) {
+      await logActivity({
+        userId,
+        groupId: payload.group_id,
+        action: 'EXPENSE_CREATED',
+        entityType: 'expense',
+        entityId: expenseId,
+        metadata: {
+          amount: payload.amount,
+          description: payload.description
+        }
+      }, client);
     }
 
     return expenseId;
@@ -155,6 +170,90 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
   return rows;
 }
 
-export async function deleteExpense(expenseId: string): Promise<void> {
-  await query(`DELETE FROM expenses WHERE id = $1`, [expenseId]);
+export async function deleteExpense(expenseId: string, groupId: string, userId?: string): Promise<void> {
+  await withTransaction(async (client) => {
+    // Ensuring expense belongs to group before deleting, and capture info for logging
+    const check = await client.query(`SELECT amount, description FROM expenses WHERE id = $1 AND group_id = $2`, [expenseId, groupId]);
+    if (check.rowCount === 0) throw new Error('Expense not found');
+    const { amount, description } = check.rows[0];
+    
+    await client.query(`DELETE FROM expenses WHERE id = $1`, [expenseId]);
+
+    if (userId) {
+      await logActivity({
+        userId,
+        groupId,
+        action: 'EXPENSE_DELETED',
+        entityType: 'expense',
+        entityId: expenseId,
+        metadata: { amount, description }
+      }, client);
+    }
+  });
+}
+
+export async function updateExpense(payload: import('@/lib/types').UpdateExpensePayload, userId?: string): Promise<void> {
+  return withTransaction(async (client: PoolClient) => {
+    // check existence
+    const { rows } = await client.query(`SELECT * FROM expenses WHERE id = $1 AND group_id = $2`, [payload.expense_id, payload.group_id]);
+    if (rows.length === 0) throw new Error('Expense not found');
+    const existing = rows[0];
+
+    const updatedAmount = payload.amount ?? existing.amount;
+    const updatedDesc = payload.description ?? existing.description;
+    const updatedCat = payload.category !== undefined ? payload.category : existing.category;
+    const updatedSplitType = payload.split_type ?? existing.split_type;
+
+    await client.query(
+      `UPDATE expenses SET amount = $1, description = $2, category = $3, split_type = $4 WHERE id = $5`,
+      [updatedAmount, updatedDesc, updatedCat, updatedSplitType, payload.expense_id]
+    );
+
+    if (payload.participants || payload.split_type || payload.amount || payload.exact_amounts || payload.percentages || payload.excluded_users) {
+      // recompute splits
+      const fullPayload = {
+        group_id: existing.group_id,
+        paid_by: existing.paid_by,
+        amount: updatedAmount,
+        description: updatedDesc,
+        category: updatedCat,
+        split_type: updatedSplitType,
+        participants: payload.participants ?? [],
+        exact_amounts: payload.exact_amounts,
+        percentages: payload.percentages,
+        excluded_users: payload.excluded_users,
+      };
+      
+      // If participants not provided, fetch current participants
+      if (!payload.participants) {
+         const { rows: splits } = await client.query(`SELECT user_id FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
+         fullPayload.participants = splits.map(r => r.user_id);
+      }
+
+      const shares = computeSplits(fullPayload as any);
+
+      await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
+      
+      for (const [userId, share] of Object.entries(shares)) {
+        await client.query(
+          `INSERT INTO expense_splits (expense_id, user_id, share) VALUES ($1, $2, $3)`,
+          [payload.expense_id, userId, share]
+        );
+      }
+    }
+
+    if (userId) {
+      await logActivity({
+        userId,
+        groupId: existing.group_id,
+        action: 'EXPENSE_UPDATED',
+        entityType: 'expense',
+        entityId: payload.expense_id,
+        metadata: {
+          old_amount: existing.amount,
+          new_amount: updatedAmount
+        }
+      }, client);
+    }
+  });
 }

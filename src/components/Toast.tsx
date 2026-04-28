@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 export type ToastType = 'success' | 'error';
 
@@ -38,22 +38,22 @@ let toastId = 0;
 export function useToast() {
   const [toasts, setToasts] = useState<ToastState[]>([]);
 
-  const show = (message: string, type: ToastType = 'success') => {
+  const show = useCallback((message: string, type: ToastType = 'success') => {
     const id = ++toastId;
     setToasts((prev) => [...prev, { id, message, type }]);
-  };
+  }, []);
 
-  const remove = (id: number) => {
+  const remove = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
 
-  const ToastContainer = () => (
+  const ToastContainer = useCallback(() => (
     <>
       {toasts.map((t) => (
         <Toast key={t.id} message={t.message} type={t.type} onClose={() => remove(t.id)} />
       ))}
     </>
-  );
+  ), [toasts, remove]);
 
   return { show, ToastContainer };
 }
