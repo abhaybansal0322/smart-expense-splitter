@@ -8,58 +8,22 @@ import { UserBalance, SettlementTransaction } from '@/lib/types';
  */
 export async function computeGroupBalances(groupId: string): Promise<UserBalance[]> {
   const { rows } = await query<UserBalance>(
-    `WITH member_ids AS (
-       SELECT u.id, u.name, u.email, u.upi_id
-       FROM users u
-       JOIN group_members gm ON gm.user_id = u.id
-       WHERE gm.group_id = $1 AND gm.status = 'accepted'
-     ),
-     -- Amount each user paid in this group
-     paid AS (
-       SELECT paid_by AS user_id, SUM(amount) AS total_paid
-       FROM expenses
-       WHERE group_id = $1 AND deleted_at IS NULL
-       GROUP BY paid_by
-     ),
-     -- Amount each user owes across all splits in this group
-     owed AS (
-       SELECT es.user_id, SUM(es.share) AS total_owed
-       FROM expense_splits es
-       JOIN expenses e ON e.id = es.expense_id
-       WHERE e.group_id = $1 AND e.deleted_at IS NULL
-       GROUP BY es.user_id
-     ),
-     -- Already confirmed settlements reduce balances
-     confirmed_sent AS (
-       SELECT from_user AS user_id, SUM(amount) AS total_sent
-       FROM settlements
-       WHERE group_id = $1 AND status = 'confirmed'
-       GROUP BY from_user
-     ),
-     confirmed_received AS (
-       SELECT to_user AS user_id, SUM(amount) AS total_received
-       FROM settlements
-       WHERE group_id = $1 AND status = 'confirmed'
-       GROUP BY to_user
-     )
-     SELECT
-       m.id AS user_id,
-       m.name,
-       m.email,
-       m.upi_id,
+    `SELECT
+       u.id AS user_id,
+       u.name,
+       u.email,
+       u.upi_id,
        ROUND(
-         COALESCE(p.total_paid, 0)
-         - COALESCE(o.total_owed, 0)
-         - COALESCE(cr.total_received, 0)
-         + COALESCE(cs.total_sent, 0),
+         (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE group_id = $1 AND paid_by = u.id AND deleted_at IS NULL)
+         - (SELECT COALESCE(SUM(es.share), 0) FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = $1 AND es.user_id = u.id AND e.deleted_at IS NULL)
+         - (SELECT COALESCE(SUM(amount), 0) FROM settlements WHERE group_id = $1 AND to_user = u.id AND status = 'confirmed')
+         + (SELECT COALESCE(SUM(amount), 0) FROM settlements WHERE group_id = $1 AND from_user = u.id AND status = 'confirmed'),
          2
        )::float AS net_balance
-     FROM member_ids m
-     LEFT JOIN paid p ON p.user_id = m.id
-     LEFT JOIN owed o ON o.user_id = m.id
-     LEFT JOIN confirmed_sent cs ON cs.user_id = m.id
-     LEFT JOIN confirmed_received cr ON cr.user_id = m.id
-     ORDER BY m.name`,
+     FROM users u
+     JOIN group_members gm ON gm.user_id = u.id
+     WHERE gm.group_id = $1 AND gm.status = 'accepted'
+     ORDER BY u.name`,
     [groupId]
   );
   return rows;

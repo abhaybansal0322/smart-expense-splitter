@@ -29,6 +29,19 @@ export async function query<T = unknown>(
   const duration = Date.now() - start;
   if (process.env.NODE_ENV === 'development') {
     console.log('Query executed', { text, duration, rows: result.rowCount });
+
+    // Performance optimization: We log queries taking longer than 50ms in development
+    // to identify missing indexes or inefficient query plans early.
+    // We only use EXPLAIN (without ANALYZE) to avoid executing the heavy query a second time.
+    if (duration > 50 && text.trim().toUpperCase().startsWith('SELECT')) {
+      try {
+        const explainResult = await client.query(`EXPLAIN ${text}`, params);
+        console.warn('Heavy query plan (>50ms):', text);
+        console.warn(explainResult.rows.map((r: any) => r['QUERY PLAN']).join('\n'));
+      } catch (e) {
+        console.error('Failed to run EXPLAIN', e);
+      }
+    }
   }
   return { rows: result.rows as T[], rowCount: result.rowCount ?? 0 };
 }

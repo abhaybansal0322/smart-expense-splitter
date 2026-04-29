@@ -96,9 +96,12 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
   }
 
   // Ledger rule: SUM(splits) == expense.amount
-  const total = Object.values(shares).reduce((sum, val) => sum + val, 0);
-  if (Math.abs(total - amount) > 0.01) {
-    throw new Error(`Ledger mismatch: Splits sum (${total}) does not match expense amount (${amount})`);
+  // Using integer math (cents) to avoid floating point precision issues
+  const totalCents = Object.values(shares).reduce((sum, val) => sum + Math.round(val * 100), 0);
+  const amountCents = Math.round(amount * 100);
+
+  if (totalCents !== amountCents) {
+    throw new Error(`Ledger mismatch: Splits sum (${totalCents / 100}) does not match expense amount (${amountCents / 100})`);
   }
 
   return shares;
@@ -161,22 +164,26 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
     `SELECT
        e.id, e.group_id, e.paid_by, e.amount::float, e.description, e.split_type, e.created_at,
        u.name AS paid_by_name,
-       json_agg(
-         json_build_object(
-           'id', es.id,
-           'expense_id', es.expense_id,
-           'user_id', es.user_id,
-           'share', es.share::float,
-           'user_name', su.name
+       (
+         SELECT COALESCE(
+           json_agg(
+             json_build_object(
+               'id', es.id,
+               'expense_id', es.expense_id,
+               'user_id', es.user_id,
+               'share', es.share::float,
+               'user_name', su.name
+             ) ORDER BY su.name
+           ),
+           '[]'
          )
-         ORDER BY su.name
+         FROM expense_splits es
+         JOIN users su ON su.id = es.user_id
+         WHERE es.expense_id = e.id
        ) AS splits
      FROM expenses e
      JOIN users u ON u.id = e.paid_by
-     JOIN expense_splits es ON es.expense_id = e.id
-     JOIN users su ON su.id = es.user_id
      WHERE e.group_id = $1 AND e.deleted_at IS NULL
-     GROUP BY e.id, u.name
      ORDER BY e.created_at DESC`,
     [groupId]
   );
