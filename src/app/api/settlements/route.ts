@@ -4,6 +4,8 @@ import { query, withTransaction } from '@/lib/db';
 import { getAuthSession } from '@/lib/auth';
 import { logActivity } from '@/services/activityService';
 import { isUserInGroup } from '@/services/groupService';
+import { logger } from '@/lib/logger';
+import crypto from 'crypto';
 
 const ConfirmSchema = z.object({
   settlement_id: z.string().uuid(),
@@ -19,6 +21,7 @@ const CreateSettlementSchema = z.object({
 
 // POST: Create or confirm a settlement
 export async function POST(req: NextRequest) {
+  const request_id = crypto.randomUUID();
   try {
     const session = await getAuthSession();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,6 +32,7 @@ export async function POST(req: NextRequest) {
     if (body.settlement_id) {
       const parsed = ConfirmSchema.safeParse(body);
       if (!parsed.success) {
+        logger.warn('Settlement confirmation validation failed', { request_id, validation_error: parsed.error.flatten() });
         return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
       }
 
@@ -49,7 +53,9 @@ export async function POST(req: NextRequest) {
            WHERE id = $2`,
           [parsed.data.upi_reference ?? null, parsed.data.settlement_id]
         );
-      });
+      }, { request_id, user_id: session.user.id });
+
+      logger.info('Settlement confirmed', { request_id, user_id: session.user.id, settlement_id: parsed.data.settlement_id });
 
       return NextResponse.json({ success: true });
     }
@@ -57,6 +63,7 @@ export async function POST(req: NextRequest) {
     // Create new settlement record
     const parsed = CreateSettlementSchema.safeParse(body);
     if (!parsed.success) {
+      logger.warn('Settlement creation validation failed', { request_id, validation_error: parsed.error.flatten() });
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
@@ -85,10 +92,12 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    logger.info('Settlement created', { request_id, user_id: session.user.id, group_id, settlement_id: settlementId });
+
     return NextResponse.json({ settlement_id: settlementId }, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('POST /api/settlements error:', msg);
+    logger.error('POST /api/settlements error', { request_id }, error);
     if (msg.includes('Forbidden')) return NextResponse.json({ error: msg }, { status: 403 });
     if (msg === 'Settlement not found') return NextResponse.json({ error: msg }, { status: 404 });
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -96,6 +105,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const request_id = crypto.randomUUID();
   try {
     const session = await getAuthSession();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -118,7 +128,7 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.json({ settlements: rows });
   } catch (error) {
-    console.error('GET /api/settlements error:', error);
+    logger.error('GET /api/settlements error', { request_id }, error);
     return NextResponse.json({ error: 'Failed to fetch settlements' }, { status: 500 });
   }
 }

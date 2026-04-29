@@ -4,6 +4,8 @@ import { createExpense } from '@/services/expenseService';
 import { isUserInGroup } from '@/services/groupService';
 import { getAuthSession } from '@/lib/auth';
 import { SplitType } from '@/lib/types';
+import { logger } from '@/lib/logger';
+import crypto from 'crypto';
 
 const CreateExpenseSchema = z.object({
   group_id: z.string().uuid(),
@@ -18,10 +20,12 @@ const CreateExpenseSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const request_id = crypto.randomUUID();
   try {
     const body = await req.json();
     const parsed = CreateExpenseSchema.safeParse(body);
     if (!parsed.success) {
+      logger.warn('Expense validation failed', { request_id, validation_error: parsed.error.flatten() });
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
@@ -32,10 +36,19 @@ export async function POST(req: NextRequest) {
     if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const expenseId = await createExpense(parsed.data, session.user.id);
+
+    logger.info('Expense created', {
+      request_id,
+      user_id: session.user.id,
+      group_id: parsed.data.group_id,
+      expenseId,
+      amount: parsed.data.amount
+    });
+
     return NextResponse.json({ expenseId }, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('POST /api/expenses error:', msg);
+    logger.error('POST /api/expenses error', { request_id }, error);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

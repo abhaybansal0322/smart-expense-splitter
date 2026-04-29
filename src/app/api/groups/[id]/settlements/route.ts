@@ -3,10 +3,13 @@ import { getSettlementPlan } from '@/services/settlementService';
 import { isUserInGroup } from '@/services/groupService';
 import { getAuthSession } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { logger } from '@/lib/logger';
+import crypto from 'crypto';
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const request_id = crypto.randomUUID();
   const { id } = await params;
   try {
     const session = await getAuthSession();
@@ -14,6 +17,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const isMember = await isUserInGroup(id, session.user.id);
     if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    logger.info('Computing settlement plan', { request_id, user_id: session.user.id, group_id: id });
 
     const [plan, { rows: saved }] = await Promise.all([
       getSettlementPlan(id),
@@ -30,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     ]);
     return NextResponse.json({ plan, settlements: saved });
   } catch (error) {
-    console.error('GET /api/groups/[id]/settlements error:', error);
+    logger.error('GET /api/groups/[id]/settlements error', { request_id, group_id: id }, error);
     return NextResponse.json({ error: 'Failed to fetch settlements' }, { status: 500 });
   }
 }

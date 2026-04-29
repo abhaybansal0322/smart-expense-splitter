@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { updateExpense, deleteExpense } from '@/services/expenseService';
 import { getAuthSession } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { logger } from '@/lib/logger';
+import crypto from 'crypto';
 
 const UpdateExpenseSchema = z.object({
   group_id: z.string().uuid(),
@@ -19,6 +21,7 @@ const UpdateExpenseSchema = z.object({
 type Params = { params: Promise<{ id: string }> };
 
 export async function DELETE(req: NextRequest, { params }: Params) {
+  const request_id = crypto.randomUUID();
   const { id } = await params;
   try {
     const session = await getAuthSession();
@@ -40,9 +43,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (!expense.is_member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     await deleteExpense(id, expense.group_id, session.user.id);
+
+    logger.info('Expense deleted', { request_id, user_id: session.user.id, group_id: expense.group_id, expenseId: id });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('DELETE /api/expenses/[id] error:', error);
+    logger.error('DELETE /api/expenses/[id] error', { request_id }, error);
     if (error.message === 'Expense not found') {
        return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
     }
@@ -51,6 +57,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const request_id = crypto.randomUUID();
   const { id } = await params;
   try {
     const session = await getAuthSession();
@@ -59,6 +66,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const parsed = UpdateExpenseSchema.safeParse(body);
     if (!parsed.success) {
+      logger.warn('Update expense validation failed', { request_id, validation_error: parsed.error.flatten() });
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
@@ -72,13 +80,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     await updateExpense({ expense_id: id, ...payload }, session.user.id);
+
+    logger.info('Expense updated', { request_id, user_id: session.user.id, group_id: payload.group_id, expenseId: id });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('PATCH /api/expenses/[id] error:', error);
+    logger.error('PATCH /api/expenses/[id] error', { request_id }, error);
     if (error.message === 'Expense not found') {
        return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
     }
-    if (error.message?.includes('Exact amounts') || error.message?.includes('Percentages')) {
+    if (error.message?.includes('Exact amounts') || error.message?.includes('Percentages') || error.message?.includes('Ledger mismatch')) {
        return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return NextResponse.json({ error: 'Failed to update expense' }, { status: 500 });
