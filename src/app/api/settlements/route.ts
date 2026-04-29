@@ -9,6 +9,7 @@ import crypto from 'crypto';
 
 const ConfirmSchema = z.object({
   settlement_id: z.string().uuid(),
+  action: z.enum(['confirm', 'reject']).default('confirm'),
   upi_reference: z.string().optional(),
 });
 
@@ -17,6 +18,7 @@ const CreateSettlementSchema = z.object({
   from_user: z.string().uuid(),
   to_user: z.string().uuid(),
   amount: z.number().positive(),
+  upi_reference: z.string().optional(),
 });
 
 // POST: Create or confirm a settlement
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // Confirm existing settlement
+    // Receiver confirms or rejects an existing settlement request.
     if (body.settlement_id) {
       const parsed = ConfirmSchema.safeParse(body);
       if (!parsed.success) {
@@ -37,30 +39,44 @@ export async function POST(req: NextRequest) {
       }
 
       await withTransaction(async (client) => {
-        const check = await client.query(
-          `SELECT id, status, group_id FROM settlements WHERE id = $1 FOR UPDATE`,
+        const check = await client.query<{
+          id: string;
+          status: string;
+          group_id: string;
+          to_user: string;
+        }>(
+          `SELECT id, status, group_id, to_user FROM settlements WHERE id = $1 FOR UPDATE`,
           [parsed.data.settlement_id]
         );
         if (check.rowCount === 0) throw new Error('Settlement not found');
         if (check.rows[0].status !== 'pending') throw new Error('Settlement is not pending');
+        if (check.rows[0].to_user !== session.user.id) {
+          throw new Error('Forbidden: Only the receiver can respond to this payment');
+        }
 
-        const isMember = await isUserInGroup(check.rows[0].group_id, session.user.id);
-        if (!isMember) throw new Error('Forbidden: Not in group');
-
-        await client.query(
-          `UPDATE settlements
-           SET status = 'confirmed', confirmed_at = NOW(), upi_reference = $1
-           WHERE id = $2`,
-          [parsed.data.upi_reference ?? null, parsed.data.settlement_id]
-        );
+        if (parsed.data.action === 'confirm') {
+          await client.query(
+            `UPDATE settlements
+             SET status = 'confirmed', confirmed_at = NOW(), upi_reference = COALESCE($1, upi_reference)
+             WHERE id = $2`,
+            [parsed.data.upi_reference ?? null, parsed.data.settlement_id]
+          );
+        } else {
+          await client.query(
+            `UPDATE settlements
+             SET status = 'cancelled'
+             WHERE id = $1`,
+            [parsed.data.settlement_id]
+          );
+        }
       }, { request_id, user_id: session.user.id });
 
-      logger.info('Settlement confirmed', { request_id, user_id: session.user.id, settlement_id: parsed.data.settlement_id });
+      logger.info('Settlement response recorded', { request_id, user_id: session.user.id, settlement_id: parsed.data.settlement_id, action: parsed.data.action });
 
       return NextResponse.json({ success: true });
     }
 
-    // Create new settlement record
+    // Payer creates a pending settlement request. Receiver must confirm it.
     const parsed = CreateSettlementSchema.safeParse(body);
     if (!parsed.success) {
       logger.warn('Settlement creation validation failed', { request_id, validation_error: parsed.error.flatten() });
@@ -68,14 +84,39 @@ export async function POST(req: NextRequest) {
     }
 
     const { group_id, from_user, to_user, amount } = parsed.data;
-    const isMember = await isUserInGroup(group_id, session.user.id);
-    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (from_user !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden: You can only record your own payment' }, { status: 403 });
+    }
+    if (from_user === to_user) {
+      return NextResponse.json({ error: 'Payer and receiver must be different users' }, { status: 400 });
+    }
+
+    const [payerIsMember, receiverIsMember] = await Promise.all([
+      isUserInGroup(group_id, from_user),
+      isUserInGroup(group_id, to_user),
+    ]);
+    if (!payerIsMember || !receiverIsMember) {
+      return NextResponse.json({ error: 'Both users must be accepted members of this group' }, { status: 400 });
+    }
+
+    const pendingDuplicate = await query(
+      `SELECT 1 FROM settlements
+       WHERE group_id = $1
+         AND from_user = $2
+         AND to_user = $3
+         AND status = 'pending'
+       LIMIT 1`,
+      [group_id, from_user, to_user]
+    );
+    if (pendingDuplicate.rowCount > 0) {
+      return NextResponse.json({ error: 'A payment request is already waiting for this receiver' }, { status: 400 });
+    }
 
     const result = await query<{ id: string }>(
-      `INSERT INTO settlements (group_id, from_user, to_user, amount, status)
-       VALUES ($1, $2, $3, $4, 'pending')
+      `INSERT INTO settlements (group_id, from_user, to_user, amount, status, upi_reference)
+       VALUES ($1, $2, $3, $4, 'pending', $5)
        RETURNING id`,
-      [group_id, from_user, to_user, amount]
+      [group_id, from_user, to_user, amount, parsed.data.upi_reference ?? null]
     );
 
     const settlementId = result.rows[0].id;
@@ -94,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     logger.info('Settlement created', { request_id, user_id: session.user.id, group_id, settlement_id: settlementId });
 
-    return NextResponse.json({ settlement_id: settlementId }, { status: 201 });
+    return NextResponse.json({ settlement_id: settlementId, status: 'pending' }, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     logger.error('POST /api/settlements error', { request_id }, error);
@@ -104,7 +145,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const request_id = crypto.randomUUID();
   try {
     const session = await getAuthSession();

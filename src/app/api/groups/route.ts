@@ -35,17 +35,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { name, description, memberEmails } = parsed.data;
+    const { name, description } = parsed.data;
+    const memberEmails = parsed.data.memberEmails.map((email) => email.trim().toLowerCase());
     // ensure current user is in the group
     if (!session.user.email) {
       return NextResponse.json({ error: 'User email not found in session' }, { status: 400 });
     }
-    if (!memberEmails.includes(session.user.email)) {
-      memberEmails.push(session.user.email);
+    const sessionEmail = session.user.email.trim().toLowerCase();
+    if (!memberEmails.includes(sessionEmail)) {
+      memberEmails.push(sessionEmail);
     }
-    const groupId = await createGroup(name, description, memberEmails);
+    const groupId = await createGroup(name, description, [...new Set(memberEmails)], session.user.id, sessionEmail);
     return NextResponse.json({ groupId }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('POST /api/groups error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create group';
     return NextResponse.json({ error: message }, { status: 400 });

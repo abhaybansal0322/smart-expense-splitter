@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          VARCHAR(255) NOT NULL,
   email         VARCHAR(320) NOT NULL UNIQUE,
-  password      VARCHAR(255),
   password_hash VARCHAR(255),
   avatar_url    TEXT,
   upi_id        TEXT,
@@ -124,3 +123,14 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NUL
 CREATE INDEX IF NOT EXISTS idx_expenses_id ON expenses(id);
 CREATE INDEX IF NOT EXISTS idx_users_id ON users(id);
 CREATE INDEX IF NOT EXISTS idx_groups_id ON groups(id);
+
+-- Standardize password storage for databases created before password_hash existed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+
+DO $$ 
+BEGIN 
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='password') THEN
+        UPDATE users SET password_hash = password WHERE password_hash IS NULL AND password IS NOT NULL;
+        ALTER TABLE users DROP COLUMN password;
+    END IF;
+END $$;

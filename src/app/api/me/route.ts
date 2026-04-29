@@ -12,16 +12,15 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // Example database query using the authenticated user's ID
-    const res = await query<any>('SELECT id, name, email FROM users WHERE id = $1', [userId]);
+    // Fetch user details including upi_id
+    const res = await query<{id: string, name: string, email: string, upi_id?: string}>('SELECT id, name, email, upi_id FROM users WHERE id = $1', [userId]);
 
     if (res.rowCount === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     return NextResponse.json({ user: res.rows[0] });
-  } catch (error) {
-    console.error('API Error:', error);
+  } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

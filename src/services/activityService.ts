@@ -1,4 +1,4 @@
-import { query, withTransaction } from '@/lib/db';
+import { query } from '@/lib/db';
 import { PoolClient } from '@neondatabase/serverless';
 
 export interface LogActivityParams {
@@ -7,7 +7,7 @@ export interface LogActivityParams {
   action: 'EXPENSE_CREATED' | 'EXPENSE_UPDATED' | 'EXPENSE_DELETED' | 'SETTLEMENT_CREATED';
   entityType: 'expense' | 'settlement';
   entityId: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export async function logActivity(

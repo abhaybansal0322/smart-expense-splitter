@@ -4,7 +4,7 @@ import { logActivity } from '@/services/activityService';
 import {
   CreateExpensePayload,
   ExpenseWithDetails,
-  SplitType,
+  UpdateExpensePayload,
 } from '@/lib/types';
 
 // ─────────────── Split Calculators ───────────────
@@ -107,20 +107,40 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
   return shares;
 }
 
+async function verifyUsersAreGroupMembers(
+  client: PoolClient,
+  groupId: string,
+  userIds: string[]
+): Promise<void> {
+  const uniqueUserIds = [...new Set(userIds)];
+  if (uniqueUserIds.length === 0) {
+    throw new Error('At least one participant is required');
+  }
+
+  const result = await client.query<{ user_id: string }>(
+    `SELECT user_id
+     FROM group_members
+     WHERE group_id = $1
+       AND status = 'accepted'
+       AND user_id = ANY($2::uuid[])`,
+    [groupId, uniqueUserIds]
+  );
+
+  if (result.rowCount !== uniqueUserIds.length) {
+    throw new Error('All payers and participants must be accepted members of the group');
+  }
+}
+
 // ─────────────── Service Functions ───────────────
 
 export async function createExpense(payload: CreateExpensePayload, userId?: string): Promise<string> {
   const shares = computeSplits(payload);
 
   return withTransaction(async (client: PoolClient) => {
-    // Verify payer is a member of the group
-    const memberCheck = await client.query(
-      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
-      [payload.group_id, payload.paid_by]
-    );
-    if (memberCheck.rowCount === 0) {
-      throw new Error('Payer is not a member of this group');
-    }
+    await verifyUsersAreGroupMembers(client, payload.group_id, [
+      payload.paid_by,
+      ...Object.keys(shares),
+    ]);
 
     // Insert expense
     const expResult = await client.query<{ id: string }>(
@@ -212,7 +232,7 @@ export async function deleteExpense(expenseId: string, groupId: string, userId?:
   });
 }
 
-export async function updateExpense(payload: import('@/lib/types').UpdateExpensePayload, userId?: string): Promise<void> {
+export async function updateExpense(payload: UpdateExpensePayload, userId?: string): Promise<void> {
   return withTransaction(async (client: PoolClient) => {
     // check existence
     const { rows } = await client.query(`SELECT * FROM expenses WHERE id = $1 AND group_id = $2 AND deleted_at IS NULL`, [payload.expense_id, payload.group_id]);
@@ -250,7 +270,11 @@ export async function updateExpense(payload: import('@/lib/types').UpdateExpense
         fullPayload.participants = splits.map(r => r.user_id);
       }
 
-      const shares = computeSplits(fullPayload as any);
+      const shares = computeSplits(fullPayload as CreateExpensePayload);
+      await verifyUsersAreGroupMembers(client, existing.group_id, [
+        existing.paid_by,
+        ...Object.keys(shares),
+      ]);
 
       await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
 

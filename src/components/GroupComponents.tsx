@@ -94,7 +94,7 @@ export function CreateGroupModal({ onClose, onCreated }: CreateGroupModalProps) 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700 }}>Create New Group</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>Invite friends to split expenses</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>Invite existing users to split expenses</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 20 }}>✕</button>
         </div>
@@ -122,11 +122,11 @@ export function CreateGroupModal({ onClose, onCreated }: CreateGroupModalProps) 
           </div>
 
           <div>
-            <label className="form-label">Add Members by Email *</label>
+            <label className="form-label">Invite Existing Members by Email *</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 className="form-input"
-                placeholder="friend@example.com"
+                placeholder="existing-user@example.com"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addEmail()}

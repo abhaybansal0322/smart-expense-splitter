@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { newDb, DataType } from 'pg-mem';
 
+interface BalanceRow {
+  user_id: string;
+  net_balance: number;
+}
+
 test('Integration: computeGroupBalances, settlements, and soft-deletes via isolated exact query execution', async () => {
   const db = newDb();
 
@@ -90,40 +95,40 @@ test('Integration: computeGroupBalances, settlements, and soft-deletes via isola
   `;
 
   // Step 1: Initial state
-  let balances = db.public.many(EXACT_APP_QUERY);
+  let balances = db.public.many(EXACT_APP_QUERY) as BalanceRow[];
 
   // Pending user U3 is completely ignored
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u3'), undefined);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u3'), undefined);
 
   // U1 net balance = paid (300) - owed (100) = 200
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, 200);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u1')?.net_balance, 200);
 
   // U2 net balance = paid (0) - owed (100) = -100
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, -100);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u2')?.net_balance, -100);
 
   // Step 2: Add a pending settlement
   db.public.none(`
     INSERT INTO settlements VALUES ('s1', 'g1', 'u2', 'u1', 50, 'pending');
   `);
-  balances = db.public.many(EXACT_APP_QUERY);
+  balances = db.public.many(EXACT_APP_QUERY) as BalanceRow[];
   // Balances unchanged because settlement is pending
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, 200);
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, -100);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u1')?.net_balance, 200);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u2')?.net_balance, -100);
 
   // Step 3: Confirm settlement
   db.public.none(`UPDATE settlements SET status = 'confirmed' WHERE id = 's1'`);
-  balances = db.public.many(EXACT_APP_QUERY);
+  balances = db.public.many(EXACT_APP_QUERY) as BalanceRow[];
   // U1 gets 50 -> net 150
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, 150);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u1')?.net_balance, 150);
   // U2 sends 50 -> net -50
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, -50);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u2')?.net_balance, -50);
 
   // Step 4: Soft delete expense
   db.public.none(`UPDATE expenses SET deleted_at = 'now' WHERE id = 'e1'`);
-  balances = db.public.many(EXACT_APP_QUERY);
+  balances = db.public.many(EXACT_APP_QUERY) as BalanceRow[];
   // Since expense is gone, balances only reflect the confirmed settlement
   // U1: received 50 -> net -50
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, -50);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u1')?.net_balance, -50);
   // U2: sent 50 -> net +50
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, 50);
+  assert.strictEqual(balances.find((b) => b.user_id === 'u2')?.net_balance, 50);
 });

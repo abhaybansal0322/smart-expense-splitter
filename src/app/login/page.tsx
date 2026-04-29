@@ -1,16 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginShell />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginShell() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 60px)', padding: '24px' }}>
+      <div className="glass-card" style={{ padding: '32px', width: '100%', maxWidth: '400px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px', textAlign: 'center' }}>Welcome Back</h1>
+      </div>
+    </div>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get('error');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const urlErrorMessage = useMemo(() => {
+    if (urlError) {
+      if (urlError === 'OAuthSignin') {
+        return 'Error connecting to Google. Please try regular login or check configuration.';
+      }
+      if (urlError === 'CredentialsSignin') {
+        return 'Invalid email or password.';
+      }
+      return urlError;
+    }
+    return '';
+  }, [urlError]);
+
+  const visibleError = error || urlErrorMessage;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,9 +76,9 @@ export default function LoginPage() {
       <div className="glass-card" style={{ padding: '32px', width: '100%', maxWidth: '400px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px', textAlign: 'center' }}>Welcome Back</h1>
         
-        {error && (
+        {visibleError && (
           <div style={{ background: 'rgba(248, 113, 113, 0.15)', border: '1px solid rgba(248, 113, 113, 0.3)', color: 'var(--accent-danger)', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px' }}>
-            {error}
+            {visibleError}
           </div>
         )}
 
@@ -82,13 +117,13 @@ export default function LoginPage() {
         <button 
           onClick={handleGoogleSignIn} 
           className="btn-secondary" 
-          style={{ width: '100%', justifyContent: 'center' }}
+          style={{ width: '100%', justifyContent: 'center', opacity: 1 }}
         >
           Sign in with Google
         </button>
 
         <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-          Don't have an account? <Link href="/signup" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>Sign up</Link>
+          Don&apos;t have an account? <Link href="/signup" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>Sign up</Link>
         </p>
       </div>
     </div>

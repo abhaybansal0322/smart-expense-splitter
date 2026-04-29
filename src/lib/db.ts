@@ -37,7 +37,7 @@ export async function query<T = unknown>(
       try {
         const explainResult = await client.query(`EXPLAIN ${text}`, params);
         console.warn('Heavy query plan (>50ms):', text);
-        console.warn(explainResult.rows.map((r: any) => r['QUERY PLAN']).join('\n'));
+        console.warn(explainResult.rows.map((r: Record<string, unknown>) => r['QUERY PLAN']).join('\n'));
       } catch (e) {
         console.error('Failed to run EXPLAIN', e);
       }

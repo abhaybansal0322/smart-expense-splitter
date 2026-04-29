@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGroupById, addMemberToGroup, isUserInGroup } from '@/services/groupService';
+import { getGroupById, inviteMemberToGroup, isUserInGroup } from '@/services/groupService';
 import { getAuthSession } from '@/lib/auth';
 import { z } from 'zod';
 
@@ -37,10 +37,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
-    await addMemberToGroup(id, parsed.data.email);
-    return NextResponse.json({ success: true });
+    await inviteMemberToGroup(id, parsed.data.email);
+    return NextResponse.json({ success: true, status: 'pending' });
   } catch (error) {
     console.error('PATCH /api/groups/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to add member' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to invite member';
+    const status = message.includes('No account') || message.includes('already') ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

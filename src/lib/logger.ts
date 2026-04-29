@@ -2,12 +2,12 @@ export type LogContext = {
   request_id?: string;
   user_id?: string;
   group_id?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 class StructuredLogger {
   private formatLog(level: string, message: string, context?: LogContext, error?: unknown) {
-    const logEntry: Record<string, any> = {
+    const logEntry: Record<string, unknown> = {
       timestamp: new Date().toISOString(),
       level,
       message,

@@ -20,6 +20,15 @@ const UpdateExpenseSchema = z.object({
 
 type Params = { params: Promise<{ id: string }> };
 
+interface ExpenseAccessRow {
+  group_id: string;
+  is_member: boolean;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export async function DELETE(req: NextRequest, { params }: Params) {
   const request_id = crypto.randomUUID();
   const { id } = await params;
@@ -28,11 +37,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     // Fetch expense and verify group membership in ONE round trip
-    const { rows } = await query<any>(
+    const { rows } = await query<ExpenseAccessRow>(
       `SELECT e.group_id, 
               CASE WHEN gm.user_id IS NOT NULL THEN true ELSE false END AS is_member
        FROM expenses e
-       LEFT JOIN group_members gm ON gm.group_id = e.group_id AND gm.user_id = $2
+       LEFT JOIN group_members gm ON gm.group_id = e.group_id AND gm.user_id = $2 AND gm.status = 'accepted'
        WHERE e.id = $1`,
       [id, session.user.id]
     );
@@ -47,9 +56,10 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     logger.info('Expense deleted', { request_id, user_id: session.user.id, group_id: expense.group_id, expenseId: id });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     logger.error('DELETE /api/expenses/[id] error', { request_id }, error);
-    if (error.message === 'Expense not found') {
+    const message = errorMessage(error, 'Failed to delete expense');
+    if (message === 'Expense not found') {
        return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
     }
     return NextResponse.json({ error: 'Failed to delete expense' }, { status: 500 });
@@ -74,7 +84,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // Verify user is in group
     const { rowCount } = await query(
-      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = 'accepted'`,
       [payload.group_id, session.user.id]
     );
     if (rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -84,13 +94,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     logger.info('Expense updated', { request_id, user_id: session.user.id, group_id: payload.group_id, expenseId: id });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     logger.error('PATCH /api/expenses/[id] error', { request_id }, error);
-    if (error.message === 'Expense not found') {
+    const message = errorMessage(error, 'Failed to update expense');
+    if (message === 'Expense not found') {
        return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
     }
-    if (error.message?.includes('Exact amounts') || error.message?.includes('Percentages') || error.message?.includes('Ledger mismatch')) {
-       return NextResponse.json({ error: error.message }, { status: 400 });
+    if (
+      message.includes('Exact amounts') ||
+      message.includes('Percentages') ||
+      message.includes('Ledger mismatch') ||
+      message.includes('participants') ||
+      message.includes('members')
+    ) {
+       return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.json({ error: 'Failed to update expense' }, { status: 500 });
   }

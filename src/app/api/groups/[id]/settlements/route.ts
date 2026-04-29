@@ -33,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         [id]
       ),
     ]);
-    return NextResponse.json({ plan, settlements: saved });
+    return NextResponse.json({ plan, settlements: saved, current_user_id: session.user.id });
   } catch (error) {
     logger.error('GET /api/groups/[id]/settlements error', { request_id, group_id: id }, error);
     return NextResponse.json({ error: 'Failed to fetch settlements' }, { status: 500 });

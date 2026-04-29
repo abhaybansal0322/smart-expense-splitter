@@ -18,6 +18,7 @@ export interface Group {
 export interface GroupMember {
   user_id: string;
   group_id: string;
+  status: 'pending' | 'accepted';
   joined_at: string;
 }
 
@@ -80,11 +81,6 @@ export interface UpdateExpensePayload extends Partial<CreateExpensePayload> {
   expense_id: string;
 }
 
-export interface ConfirmSettlementPayload {
-  settlement_id: string;
-  upi_reference?: string;
-}
-
 // ─────────────── Computed/View Types ───────────────
 export interface UserBalance {
   user_id: string;
@@ -104,11 +100,35 @@ export interface SettlementTransaction {
   upi_link?: string;
 }
 
+export interface SettlementRecord {
+  id: string;
+  group_id: string;
+  from_user: string;
+  to_user: string;
+  amount: number;
+  status: SettlementStatus;
+  upi_reference?: string;
+  created_at: string;
+  confirmed_at?: string;
+  from_name: string;
+  to_name: string;
+  to_upi_id?: string;
+}
+
 export interface GroupWithDetails extends Group {
   members: User[];
   member_count: number;
   total_expenses: number;
   pending_settlements: number;
+}
+
+export interface GroupInvitation {
+  group_id: string;
+  group_name: string;
+  group_description?: string;
+  invited_at: string;
+  invited_by_name?: string;
+  accepted_member_count: number;
 }
 
 export interface ExpenseWithDetails extends Expense {
@@ -120,20 +140,10 @@ export interface Activity {
   id: string;
   action: 'EXPENSE_CREATED' | 'EXPENSE_UPDATED' | 'EXPENSE_DELETED' | 'SETTLEMENT_CREATED';
   entity_type: 'expense' | 'settlement';
-  metadata: any;
+  metadata: Record<string, unknown>;
   created_at: string;
   user: {
     id: string;
     name: string;
   };
-}
-
-export interface PendingDue {
-  expense_id: string;
-  description: string;
-  amount: number;
-  share: number;
-  paid_by_name: string;
-  days_overdue: number;
-  created_at: string;
 }

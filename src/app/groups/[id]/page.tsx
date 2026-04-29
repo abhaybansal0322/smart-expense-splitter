@@ -5,9 +5,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Avatar } from '@/components/GroupComponents';
 import { AddExpenseModal } from '@/components/AddExpenseModal';
-import { SettlementCard } from '@/components/SettlementCard';
+import { PendingSettlementCard, SettlementCard } from '@/components/SettlementCard';
 import { useToast } from '@/components/Toast';
-import { GroupWithDetails, ExpenseWithDetails, UserBalance, SettlementTransaction, User, Activity } from '@/lib/types';
+import { Activity, ExpenseWithDetails, GroupWithDetails, SettlementRecord, SettlementTransaction, User, UserBalance } from '@/lib/types';
 
 type Tab = 'expenses' | 'balances' | 'settlements' | 'members' | 'activity';
 
@@ -27,6 +27,8 @@ export default function GroupPage() {
   const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([]);
   const [balances, setBalances] = useState<UserBalance[]>([]);
   const [settlements, setSettlements] = useState<SettlementTransaction[]>([]);
+  const [settlementRecords, setSettlementRecords] = useState<SettlementRecord[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [tab, setTab] = useState<Tab>('expenses');
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,6 @@ export default function GroupPage() {
   const { show, ToastContainer } = useToast();
 
   const fetchAll = useCallback(async () => {
-    console.log("fetchAll triggered", { groupId });
     try {
       const [groupRes, expRes, balRes, setRes] = await Promise.all([
         fetch(`/api/groups/${groupId}`),
@@ -53,6 +54,8 @@ export default function GroupPage() {
       setExpenses(ed.expenses ?? []);
       setBalances(bd.balances ?? []);
       setSettlements(sd.plan ?? []);
+      setSettlementRecords(sd.settlements ?? []);
+      setCurrentUserId(sd.current_user_id ?? null);
     } catch (err) {
       console.error("fetchAll error", err);
       show('Failed to load group data', 'error');
@@ -62,7 +65,6 @@ export default function GroupPage() {
   }, [groupId, show, router]);
 
   const fetchActivity = useCallback(async () => {
-    console.log("fetchActivity triggered", { groupId });
     setFetchingActivity(true);
     try {
       const res = await fetch(`/api/groups/${groupId}/activity`);
@@ -70,8 +72,7 @@ export default function GroupPage() {
       if (res.ok) {
         setActivity(data.activity ?? []);
       }
-    } catch (err) {
-      console.error("fetchActivity error", err);
+    } catch {
       show('Failed to load activity', 'error');
     } finally {
       setFetchingActivity(false);
@@ -79,12 +80,14 @@ export default function GroupPage() {
   }, [groupId, show]);
 
   useEffect(() => {
-    if (groupId) fetchAll();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (groupId) void fetchAll();
   }, [groupId, fetchAll]);
 
   useEffect(() => {
     if (tab === 'activity') {
-      fetchActivity();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void fetchActivity();
     }
   }, [tab, fetchActivity]);
 
@@ -97,12 +100,13 @@ export default function GroupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: addMemberEmail }),
       });
-      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to invite member');
       setAddMemberEmail('');
-      show('Member added!', 'success');
-      fetchAll();
-    } catch {
-      show('Failed to add member', 'error');
+      show('Invitation sent', 'success');
+      void fetchAll();
+    } catch (error) {
+      show(error instanceof Error ? error.message : 'Failed to invite member', 'error');
     } finally {
       setAddingMember(false);
     }
@@ -206,7 +210,14 @@ export default function GroupPage() {
             <BalancesTab balances={balances} />
           )}
           {tab === 'settlements' && (
-            <SettlementsTab settlements={settlements} groupId={groupId} onSettled={fetchAll} />
+            <SettlementsTab
+              settlements={settlements}
+              settlementRecords={settlementRecords}
+              groupId={groupId}
+              currentUserId={currentUserId}
+              onChanged={fetchAll}
+              showToast={show}
+            />
           )}
           {tab === 'members' && (
             <MembersTab
@@ -307,8 +318,9 @@ function ExpenseRow({ expense, onRefresh, showToast, onEdit }: { expense: Expens
       if (!res.ok) throw new Error(data.error || 'Failed to delete expense');
       showToast('Expense deleted', 'success');
       onRefresh();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete expense', 'error');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete expense';
+      showToast(msg, 'error');
     } finally {
       setDeleting(false);
       setShowConfirm(false);
@@ -382,7 +394,7 @@ function ExpenseRow({ expense, onRefresh, showToast, onEdit }: { expense: Expens
           <div className="modal-content" style={{ maxWidth: 400, padding: 24, textAlign: 'center' }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Delete Expense?</h3>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              Are you sure you want to delete this expense? This action cannot be undone and will affect everyone's balances.
+              Are you sure you want to delete this expense? This action cannot be undone and will affect everyone&apos;s balances.
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
               <button className="btn-secondary" onClick={() => setShowConfirm(false)} disabled={deleting} style={{ flex: 1, justifyContent: 'center' }}>
@@ -453,9 +465,28 @@ function BalancesTab({ balances }: { balances: UserBalance[] }) {
 }
 
 function SettlementsTab({
-  settlements, groupId, onSettled,
-}: { settlements: SettlementTransaction[]; groupId: string; onSettled: () => void }) {
-  if (settlements.length === 0) {
+  settlements,
+  settlementRecords,
+  groupId,
+  currentUserId,
+  onChanged,
+  showToast,
+}: {
+  settlements: SettlementTransaction[];
+  settlementRecords: SettlementRecord[];
+  groupId: string;
+  currentUserId: string | null;
+  onChanged: () => void;
+  showToast: (msg: string, type: 'success' | 'error') => void;
+}) {
+  const pendingRecords = settlementRecords.filter((record) => record.status === 'pending');
+  const historyRecords = settlementRecords.filter((record) => record.status !== 'pending').slice(0, 8);
+  const actionableSettlements = settlements.filter(
+    (txn) => !pendingRecords.some(
+      (record) => record.from_user === txn.from_user_id && record.to_user === txn.to_user_id
+    )
+  );
+  if (actionableSettlements.length === 0 && pendingRecords.length === 0 && historyRecords.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 24px' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
@@ -467,20 +498,72 @@ function SettlementsTab({
 
   return (
     <div>
+      {pendingRecords.length > 0 && (
+        <section style={{ marginBottom: 28 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Pending Confirmations</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {pendingRecords.map((record) => (
+              <PendingSettlementCard
+                key={record.id}
+                settlement={record}
+                currentUserId={currentUserId}
+                onChanged={onChanged}
+                onError={(message) => showToast(message, 'error')}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {actionableSettlements.length > 0 && (
+        <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: '14px 20px', background: 'rgba(124,111,255,0.08)', border: '1px solid rgba(124,111,255,0.2)', borderRadius: 12 }}>
         <span style={{ fontSize: 18 }}>⚡</span>
         <div>
           <p style={{ fontWeight: 600, fontSize: 14 }}>Optimized Settlement Plan</p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {settlements.length} transaction{settlements.length !== 1 ? 's' : ''} needed to settle all debts (minimized via greedy algorithm)
+            Enter any amount up to the suggested amount. The receiver must confirm before balances change.
           </p>
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {settlements.map((txn, i) => (
-          <SettlementCard key={i} transaction={txn} groupId={groupId} onConfirmed={onSettled} />
+            {actionableSettlements.map((txn, i) => (
+          <SettlementCard
+            key={`${txn.from_user_id}-${txn.to_user_id}-${i}`}
+            transaction={txn}
+            groupId={groupId}
+            currentUserId={currentUserId}
+            onChanged={onChanged}
+            onError={(message) => showToast(message, 'error')}
+          />
         ))}
       </div>
+        </>
+      )}
+      {historyRecords.length > 0 && (
+        <section style={{ marginTop: 28 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Recent Settlement History</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {historyRecords.map((record) => (
+              <div key={record.id} className="glass-card" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14 }}>
+                    <strong>{record.from_name}</strong> paid <strong>{record.to_name}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {new Date(record.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 800 }}>Rs. {record.amount.toFixed(2)}</div>
+                  <span className={record.status === 'confirmed' ? 'badge badge-green' : 'badge badge-red'}>
+                    {record.status === 'confirmed' ? 'Confirmed' : 'Rejected'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -496,22 +579,25 @@ function MembersTab({
 }) {
   return (
     <div>
-      {/* Add member */}
+      {/* Invite member */}
       <div className="glass-card" style={{ padding: '20px', marginBottom: 20 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Add Member</p>
+        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Invite Member</p>
         <div style={{ display: 'flex', gap: 10 }}>
           <input
             className="form-input"
-            placeholder="friend@example.com"
+            placeholder="existing-user@example.com"
             value={addMemberEmail}
             onChange={(e) => setAddMemberEmail(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onAddMember()}
             style={{ flex: 1 }}
           />
           <button className="btn-primary" onClick={onAddMember} disabled={addingMember} style={{ flexShrink: 0 }}>
-            {addingMember ? '...' : 'Add'}
+            {addingMember ? '...' : 'Invite'}
           </button>
         </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+          The user must already have an account. They will join after accepting the invitation.
+        </p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -564,7 +650,7 @@ function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boo
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
     }).format(amount);
   };
 
@@ -582,30 +668,34 @@ function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boo
 
   const renderActivityText = (a: Activity) => {
     const userName = <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.user.name}</span>;
+    const amount = Number(a.metadata.amount ?? 0);
+    const oldAmount = Number(a.metadata.old_amount ?? 0);
+    const newAmount = Number(a.metadata.new_amount ?? 0);
+    const description = String(a.metadata.description ?? 'expense');
 
     switch (a.action) {
       case 'EXPENSE_CREATED':
         return (
           <>
-            {userName} added {a.metadata.description} <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatCurrency(a.metadata.amount)}</span>
+            {userName} added {description} <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatCurrency(amount)}</span>
           </>
         );
       case 'EXPENSE_UPDATED':
         return (
           <>
-            {userName} updated expense from <span style={{ color: 'var(--text-muted)', textDecoration: 'line-through' }}>{formatCurrency(a.metadata.old_amount)}</span> → <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatCurrency(a.metadata.new_amount)}</span>
+            {userName} updated expense from <span style={{ color: 'var(--text-muted)', textDecoration: 'line-through' }}>{formatCurrency(oldAmount)}</span> → <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatCurrency(newAmount)}</span>
           </>
         );
       case 'EXPENSE_DELETED':
         return (
           <>
-            {userName} deleted {a.metadata.description} ({formatCurrency(a.metadata.amount)})
+            {userName} deleted {description} ({formatCurrency(amount)})
           </>
         );
       case 'SETTLEMENT_CREATED':
         return (
           <>
-            {userName} paid <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>{formatCurrency(a.metadata.amount)}</span>
+            {userName} paid <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>{formatCurrency(amount)}</span>
           </>
         );
       default:

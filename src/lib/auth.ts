@@ -3,8 +3,18 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 import { query } from './db';
-import { User } from './types';
 import { getServerSession } from 'next-auth/next';
+
+interface AuthUserRow {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string | null;
+}
+
+interface UserIdRow {
+  id: string;
+}
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -30,22 +40,21 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials');
         }
 
-        const res = await query<any>(
-          'SELECT id, name, email, password, password_hash FROM users WHERE email = $1',
-          [credentials.email]
+        const email = credentials.email.trim().toLowerCase();
+        const res = await query<AuthUserRow>(
+          'SELECT id, name, email, password_hash FROM users WHERE email = $1',
+          [email]
         );
 
         const user = res.rows[0];
 
-        const storedPassword = user?.password_hash || user?.password;
-
-        if (!user || !storedPassword) {
+        if (!user || !user.password_hash) {
           throw new Error('User not found or using another login method');
         }
 
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
-          storedPassword
+          user.password_hash
         );
 
         if (!isPasswordValid) {
@@ -61,19 +70,20 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === 'google') {
         const email = user.email;
         if (!email) return false;
 
-        // Check if user exists
-        const res = await query<any>('SELECT id FROM users WHERE email = $1', [email]);
+        const normalizedEmail = email.trim().toLowerCase();
+        // Check if user exists (case-insensitive)
+        const res = await query<UserIdRow>('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
         
         if (res.rowCount === 0) {
           // Store new Google user in PostgreSQL
           await query(
             'INSERT INTO users (name, email) VALUES ($1, $2)',
-            [user.name || 'Google User', email]
+            [user.name || 'Google User', normalizedEmail]
           );
         }
         return true;
@@ -83,8 +93,11 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account }) {
       if (user) {
         if (account?.provider === 'google') {
-          // Fetch the database user ID if it's a google login
-          const dbUserRes = await query<any>('SELECT id FROM users WHERE email = $1', [user.email]);
+          // Fetch the database user ID if it's a google login (case-insensitive)
+          const email = user.email?.trim().toLowerCase();
+          if (!email) return token;
+
+          const dbUserRes = await query<UserIdRow>('SELECT id FROM users WHERE email = $1', [email]);
           if (dbUserRes.rowCount > 0) {
             token.id = dbUserRes.rows[0].id;
           }

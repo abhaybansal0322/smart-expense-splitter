@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { computeSplits } from './expenseService';
-import { CreateExpensePayload, SplitType } from '@/lib/types';
+import { CreateExpensePayload } from '@/lib/types';
 
 test('computeSplits - equal split', () => {
   const payload: CreateExpensePayload = {

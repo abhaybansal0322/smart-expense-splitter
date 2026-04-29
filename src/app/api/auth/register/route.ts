@@ -10,15 +10,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
     }
 
-    const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const emailLower = email.toLowerCase();
+    const existingUser = await query('SELECT id FROM users WHERE email = $1', [emailLower]);
     if (existingUser.rowCount > 0) {
       return NextResponse.json({ message: 'User already exists' }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await query(
-      'INSERT INTO users (name, email, password) VALUES ($1, $2, $3)',
-      [name, email, hashedPassword]
+      'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3)',
+      [name, emailLower, hashedPassword]
     );
 
     return NextResponse.json({ message: 'User created successfully' }, { status: 201 });

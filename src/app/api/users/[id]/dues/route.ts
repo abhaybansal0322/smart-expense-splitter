@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { getAuthSession } from '@/lib/auth';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -9,6 +10,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const OVERDUE_DAYS = 7;
 
   try {
+    const session = await getAuthSession();
+    if (!session?.user?.id || session.user.id !== id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { rows } = await query(
       `SELECT
          e.id AS expense_id,
