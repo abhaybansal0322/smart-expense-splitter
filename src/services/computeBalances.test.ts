@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { newDb, DataType } from 'pg-mem';
 
-test('Integration: computeGroupBalances, settlements, and soft-deletes', async () => {
+test('Integration: computeGroupBalances, settlements, and soft-deletes via isolated exact query execution', async () => {
   const db = newDb();
 
   // Register ROUND function for pg-mem
@@ -37,9 +37,8 @@ test('Integration: computeGroupBalances, settlements, and soft-deletes', async (
     INSERT INTO expense_splits VALUES ('e1', 'u1', 100), ('e1', 'u2', 100), ('e1', 'u3', 100);
   `);
 
-  // Using CTE formulation for pg-mem compatibility since it struggles with outer references in nested subqueries sometimes
-  const getBalances = () => db.public.many(`
-    WITH member_ids AS (
+  const EXACT_APP_QUERY = `
+     WITH member_ids AS (
        SELECT u.id, u.name, u.email, u.upi_id
        FROM users u
        JOIN group_members gm ON gm.user_id = u.id
@@ -73,6 +72,8 @@ test('Integration: computeGroupBalances, settlements, and soft-deletes', async (
      SELECT
        m.id AS user_id,
        m.name,
+       m.email,
+       m.upi_id,
        ROUND(
          COALESCE(p.total_paid, 0)
          - COALESCE(o.total_owed, 0)
@@ -86,43 +87,43 @@ test('Integration: computeGroupBalances, settlements, and soft-deletes', async (
      LEFT JOIN confirmed_sent cs ON cs.user_id = m.id
      LEFT JOIN confirmed_received cr ON cr.user_id = m.id
      ORDER BY m.name
-  `);
+  `;
 
   // Step 1: Initial state
-  let balances = getBalances();
+  let balances = db.public.many(EXACT_APP_QUERY);
 
   // Pending user U3 is completely ignored
   assert.strictEqual(balances.find((b: any) => b.user_id === 'u3'), undefined);
 
   // U1 net balance = paid (300) - owed (100) = 200
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1').net_balance, 200);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, 200);
 
   // U2 net balance = paid (0) - owed (100) = -100
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2').net_balance, -100);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, -100);
 
   // Step 2: Add a pending settlement
   db.public.none(`
     INSERT INTO settlements VALUES ('s1', 'g1', 'u2', 'u1', 50, 'pending');
   `);
-  balances = getBalances();
+  balances = db.public.many(EXACT_APP_QUERY);
   // Balances unchanged because settlement is pending
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1').net_balance, 200);
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2').net_balance, -100);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, 200);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, -100);
 
   // Step 3: Confirm settlement
   db.public.none(`UPDATE settlements SET status = 'confirmed' WHERE id = 's1'`);
-  balances = getBalances();
+  balances = db.public.many(EXACT_APP_QUERY);
   // U1 gets 50 -> net 150
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1').net_balance, 150);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, 150);
   // U2 sends 50 -> net -50
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2').net_balance, -50);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, -50);
 
   // Step 4: Soft delete expense
   db.public.none(`UPDATE expenses SET deleted_at = 'now' WHERE id = 'e1'`);
-  balances = getBalances();
+  balances = db.public.many(EXACT_APP_QUERY);
   // Since expense is gone, balances only reflect the confirmed settlement
   // U1: received 50 -> net -50
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1').net_balance, -50);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u1')?.net_balance, -50);
   // U2: sent 50 -> net +50
-  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2').net_balance, 50);
+  assert.strictEqual(balances.find((b: any) => b.user_id === 'u2')?.net_balance, 50);
 });

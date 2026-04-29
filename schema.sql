@@ -121,3 +121,6 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_created  ON activity_logs(created_a
 
 ALTER TABLE group_members ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'accepted';
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_expenses_id ON expenses(id);
+CREATE INDEX IF NOT EXISTS idx_users_id ON users(id);
+CREATE INDEX IF NOT EXISTS idx_groups_id ON groups(id);

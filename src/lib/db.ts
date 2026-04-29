@@ -46,8 +46,11 @@ export async function query<T = unknown>(
   return { rows: result.rows as T[], rowCount: result.rowCount ?? 0 };
 }
 
+import { logger } from './logger';
+
 export async function withTransaction<T>(
-  fn: (client: import('@neondatabase/serverless').PoolClient) => Promise<T>
+  fn: (client: import('@neondatabase/serverless').PoolClient) => Promise<T>,
+  context?: { request_id?: string; user_id?: string; group_id?: string }
 ): Promise<T> {
   const client = await getPool().connect();
   try {
@@ -57,6 +60,7 @@ export async function withTransaction<T>(
     return result;
   } catch (error) {
     await client.query('ROLLBACK');
+    logger.error('Transaction failed and rolled back', context, error);
     throw error;
   } finally {
     client.release();
