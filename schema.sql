@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   group_id  UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   role      VARCHAR(50) DEFAULT 'member',
+  status    VARCHAR(50) DEFAULT 'accepted',
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, group_id)
 );
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   description VARCHAR(500) NOT NULL,
   category    VARCHAR(100),
   split_type  split_type NOT NULL DEFAULT 'equal',
+  deleted_at  TIMESTAMPTZ DEFAULT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -117,3 +119,5 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_created  ON activity_logs(created_a
 --   ('Bob',     'bob@example.com',     'bob@upi'),
 --   ('Charlie', 'charlie@example.com', 'charlie@upi');
 
+ALTER TABLE group_members ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'accepted';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;

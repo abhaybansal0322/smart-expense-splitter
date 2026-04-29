@@ -12,13 +12,13 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
        SELECT u.id, u.name, u.email, u.upi_id
        FROM users u
        JOIN group_members gm ON gm.user_id = u.id
-       WHERE gm.group_id = $1
+       WHERE gm.group_id = $1 AND gm.status = 'accepted'
      ),
      -- Amount each user paid in this group
      paid AS (
        SELECT paid_by AS user_id, SUM(amount) AS total_paid
        FROM expenses
-       WHERE group_id = $1
+       WHERE group_id = $1 AND deleted_at IS NULL
        GROUP BY paid_by
      ),
      -- Amount each user owes across all splits in this group
@@ -26,7 +26,7 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
        SELECT es.user_id, SUM(es.share) AS total_owed
        FROM expense_splits es
        JOIN expenses e ON e.id = es.expense_id
-       WHERE e.group_id = $1
+       WHERE e.group_id = $1 AND e.deleted_at IS NULL
        GROUP BY es.user_id
      ),
      -- Already confirmed settlements reduce balances
@@ -50,8 +50,8 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
        ROUND(
          COALESCE(p.total_paid, 0)
          - COALESCE(o.total_owed, 0)
-         + COALESCE(cr.total_received, 0)
-         - COALESCE(cs.total_sent, 0),
+         - COALESCE(cr.total_received, 0)
+         + COALESCE(cs.total_sent, 0),
          2
        )::float AS net_balance
      FROM member_ids m

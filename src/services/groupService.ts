@@ -4,7 +4,8 @@ import { Group, GroupWithDetails, User } from '@/lib/types';
 export async function createGroup(
   name: string,
   description: string | undefined,
-  memberEmails: string[]
+  memberEmails: string[],
+  creatorEmail: string
 ): Promise<string> {
   return withTransaction(async (client) => {
     // Create group
@@ -25,10 +26,12 @@ export async function createGroup(
       );
       const userId = userResult.rows[0].id;
 
+      const role = email === creatorEmail ? 'admin' : 'member';
+
       await client.query(
-        `INSERT INTO group_members (user_id, group_id) VALUES ($1, $2)
+        `INSERT INTO group_members (user_id, group_id, role) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING`,
-        [userId, groupId]
+        [userId, groupId, role]
       );
     }
 
@@ -44,8 +47,8 @@ export async function getGroupsForUser(userId: string): Promise<GroupWithDetails
   const { rows } = await query<GroupWithDetails>(
     `SELECT
        g.id, g.name, g.description, g.created_at,
-       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id) AS member_count,
-       (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id) AS total_expenses,
+       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id AND status = 'accepted') AS member_count,
+       (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id AND deleted_at IS NULL) AS total_expenses,
        (SELECT COUNT(*)::int FROM settlements WHERE group_id = g.id AND status = 'pending') AS pending_settlements,
        (
          SELECT COALESCE(
@@ -56,11 +59,11 @@ export async function getGroupsForUser(userId: string): Promise<GroupWithDetails
          )
          FROM group_members gm
          JOIN users u ON u.id = gm.user_id
-         WHERE gm.group_id = g.id
+         WHERE gm.group_id = g.id AND gm.status = 'accepted'
        ) AS members
      FROM groups g
      JOIN group_members gm_filter ON gm_filter.group_id = g.id
-     WHERE gm_filter.user_id = $1
+     WHERE gm_filter.user_id = $1 AND gm_filter.status = 'accepted'
      ORDER BY g.created_at DESC`,
     [userId]
   );
@@ -73,8 +76,8 @@ export async function getGroupById(groupId: string): Promise<GroupWithDetails | 
   const { rows } = await query<GroupWithDetails>(
     `SELECT
        g.id, g.name, g.description, g.created_at,
-       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id) AS member_count,
-       (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id) AS total_expenses,
+       (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id AND status = 'accepted') AS member_count,
+       (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id AND deleted_at IS NULL) AS total_expenses,
        (SELECT COUNT(*)::int FROM settlements WHERE group_id = g.id AND status = 'pending') AS pending_settlements,
        (
          SELECT COALESCE(
@@ -85,7 +88,7 @@ export async function getGroupById(groupId: string): Promise<GroupWithDetails | 
          )
          FROM group_members gm
          JOIN users u ON u.id = gm.user_id
-         WHERE gm.group_id = g.id
+         WHERE gm.group_id = g.id AND gm.status = 'accepted'
        ) AS members
      FROM groups g
      WHERE g.id = $1`,
@@ -116,7 +119,7 @@ export async function getGroupMembers(groupId: string): Promise<User[]> {
     `SELECT u.id, u.name, u.email, u.upi_id, u.created_at
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id
-     WHERE gm.group_id = $1
+     WHERE gm.group_id = $1 AND gm.status = 'accepted'
      ORDER BY u.name`,
     [groupId]
   );
@@ -129,7 +132,7 @@ export async function updateUserUpi(userId: string, upiId: string): Promise<void
 
 export async function isUserInGroup(groupId: string, userId: string): Promise<boolean> {
   const { rowCount } = await query(
-    `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+    `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = 'accepted'`,
     [groupId, userId]
   );
   return (rowCount ?? 0) > 0;
