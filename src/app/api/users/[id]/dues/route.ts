@@ -26,6 +26,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
        JOIN groups g ON g.id = e.group_id
        WHERE es.user_id = $1
          AND es.user_id <> e.paid_by
+         AND e.deleted_at IS NULL
          AND e.created_at < NOW() - INTERVAL '${OVERDUE_DAYS} days'
          AND NOT EXISTS (
            SELECT 1 FROM settlements s

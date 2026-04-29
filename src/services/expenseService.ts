@@ -75,20 +75,33 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
   const { amount, split_type, participants, exact_amounts, percentages, excluded_users } =
     payload;
 
+  let shares: Record<string, number>;
   switch (split_type) {
     case 'equal':
-      return computeEqualSplit(amount, participants);
+      shares = computeEqualSplit(amount, participants);
+      break;
     case 'exact':
       if (!exact_amounts) throw new Error('exact_amounts required for split_type=exact');
-      return computeExactSplit(amount, exact_amounts);
+      shares = computeExactSplit(amount, exact_amounts);
+      break;
     case 'percentage':
       if (!percentages) throw new Error('percentages required for split_type=percentage');
-      return computePercentageSplit(amount, percentages);
+      shares = computePercentageSplit(amount, percentages);
+      break;
     case 'exclude':
-      return computeExcludeSplit(amount, participants, excluded_users ?? []);
+      shares = computeExcludeSplit(amount, participants, excluded_users ?? []);
+      break;
     default:
       throw new Error(`Unknown split_type: ${split_type}`);
   }
+
+  // Ledger rule: SUM(splits) == expense.amount
+  const total = Object.values(shares).reduce((sum, val) => sum + val, 0);
+  if (Math.abs(total - amount) > 0.01) {
+    throw new Error(`Ledger mismatch: Splits sum (${total}) does not match expense amount (${amount})`);
+  }
+
+  return shares;
 }
 
 // ─────────────── Service Functions ───────────────
@@ -162,7 +175,7 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
      JOIN users u ON u.id = e.paid_by
      JOIN expense_splits es ON es.expense_id = e.id
      JOIN users su ON su.id = es.user_id
-     WHERE e.group_id = $1
+     WHERE e.group_id = $1 AND e.deleted_at IS NULL
      GROUP BY e.id, u.name
      ORDER BY e.created_at DESC`,
     [groupId]
@@ -173,11 +186,11 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
 export async function deleteExpense(expenseId: string, groupId: string, userId?: string): Promise<void> {
   await withTransaction(async (client) => {
     // Ensuring expense belongs to group before deleting, and capture info for logging
-    const check = await client.query(`SELECT amount, description FROM expenses WHERE id = $1 AND group_id = $2`, [expenseId, groupId]);
+    const check = await client.query(`SELECT amount, description FROM expenses WHERE id = $1 AND group_id = $2 AND deleted_at IS NULL`, [expenseId, groupId]);
     if (check.rowCount === 0) throw new Error('Expense not found');
     const { amount, description } = check.rows[0];
 
-    await client.query(`DELETE FROM expenses WHERE id = $1`, [expenseId]);
+    await client.query(`UPDATE expenses SET deleted_at = NOW() WHERE id = $1`, [expenseId]);
 
     if (userId) {
       await logActivity({
@@ -195,7 +208,7 @@ export async function deleteExpense(expenseId: string, groupId: string, userId?:
 export async function updateExpense(payload: import('@/lib/types').UpdateExpensePayload, userId?: string): Promise<void> {
   return withTransaction(async (client: PoolClient) => {
     // check existence
-    const { rows } = await client.query(`SELECT * FROM expenses WHERE id = $1 AND group_id = $2`, [payload.expense_id, payload.group_id]);
+    const { rows } = await client.query(`SELECT * FROM expenses WHERE id = $1 AND group_id = $2 AND deleted_at IS NULL`, [payload.expense_id, payload.group_id]);
     if (rows.length === 0) throw new Error('Expense not found');
     const existing = rows[0];
 
