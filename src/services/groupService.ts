@@ -4,8 +4,7 @@ import { Group, GroupWithDetails, User } from '@/lib/types';
 export async function createGroup(
   name: string,
   description: string | undefined,
-  memberEmails: string[],
-  creatorEmail: string
+  memberEmails: string[]
 ): Promise<string> {
   return withTransaction(async (client) => {
     // Create group
@@ -26,12 +25,10 @@ export async function createGroup(
       );
       const userId = userResult.rows[0].id;
 
-      const role = email === creatorEmail ? 'admin' : 'member';
-
       await client.query(
-        `INSERT INTO group_members (user_id, group_id, role) VALUES ($1, $2, $3)
+        `INSERT INTO group_members (user_id, group_id) VALUES ($1, $2)
          ON CONFLICT DO NOTHING`,
-        [userId, groupId, role]
+        [userId, groupId]
       );
     }
 
