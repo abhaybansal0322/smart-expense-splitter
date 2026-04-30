@@ -186,6 +186,23 @@ export async function createExpense(payload: CreateExpensePayload, userId?: stri
       );
     }
 
+    if (payload.spotify_track) {
+      await client.query(
+        `INSERT INTO expense_spotify_tracks
+           (expense_id, spotify_track_id, spotify_url, name, artist, album_name, album_image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          expenseId,
+          payload.spotify_track.spotify_track_id,
+          payload.spotify_track.spotify_url,
+          payload.spotify_track.name,
+          payload.spotify_track.artist,
+          payload.spotify_track.album_name ?? null,
+          payload.spotify_track.album_image_url ?? null,
+        ]
+      );
+    }
+
     if (userId) {
       await logActivity({
         userId,
@@ -225,7 +242,41 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
          FROM expense_splits es
          JOIN users su ON su.id = es.user_id
          WHERE es.expense_id = e.id
-       ) AS splits
+       ) AS splits,
+       (
+         SELECT COALESCE(
+           json_agg(
+             json_build_object(
+               'id', ea.id,
+               'expense_id', ea.expense_id,
+               'file_url', ea.file_url,
+               'original_name', ea.original_name,
+               'mime_type', ea.mime_type,
+               'size_bytes', ea.size_bytes,
+               'uploaded_by', ea.uploaded_by,
+               'created_at', ea.created_at
+             ) ORDER BY ea.created_at
+           ),
+           '[]'
+         )
+         FROM expense_attachments ea
+         WHERE ea.expense_id = e.id
+       ) AS attachments,
+       (
+         SELECT json_build_object(
+           'id', est.id,
+           'expense_id', est.expense_id,
+           'spotify_track_id', est.spotify_track_id,
+           'spotify_url', est.spotify_url,
+           'name', est.name,
+           'artist', est.artist,
+           'album_name', est.album_name,
+           'album_image_url', est.album_image_url,
+           'created_at', est.created_at
+         )
+         FROM expense_spotify_tracks est
+         WHERE est.expense_id = e.id
+       ) AS spotify_track
      FROM expenses e
      JOIN users u ON u.id = e.paid_by
      WHERE e.group_id = $1 AND e.deleted_at IS NULL
@@ -308,6 +359,27 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
         await client.query(
           `INSERT INTO expense_splits (expense_id, user_id, share) VALUES ($1, $2, $3)`,
           [payload.expense_id, userId, share]
+        );
+      }
+    }
+
+    if ('spotify_track' in payload) {
+      await client.query(`DELETE FROM expense_spotify_tracks WHERE expense_id = $1`, [payload.expense_id]);
+
+      if (payload.spotify_track) {
+        await client.query(
+          `INSERT INTO expense_spotify_tracks
+             (expense_id, spotify_track_id, spotify_url, name, artist, album_name, album_image_url)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            payload.expense_id,
+            payload.spotify_track.spotify_track_id,
+            payload.spotify_track.spotify_url,
+            payload.spotify_track.name,
+            payload.spotify_track.artist,
+            payload.spotify_track.album_name ?? null,
+            payload.spotify_track.album_image_url ?? null,
+          ]
         );
       }
     }

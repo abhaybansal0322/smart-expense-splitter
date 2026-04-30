@@ -40,6 +40,29 @@ export interface ExpenseSplit {
   share: number; // actual amount this user owes
 }
 
+export interface ExpenseAttachment {
+  id: string;
+  expense_id: string;
+  file_url: string;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: string;
+}
+
+export interface ExpenseSpotifyTrack {
+  id?: string;
+  expense_id?: string;
+  spotify_track_id: string;
+  spotify_url: string;
+  name: string;
+  artist: string;
+  album_name?: string;
+  album_image_url?: string;
+  created_at?: string;
+}
+
 export interface Settlement {
   id: string;
   group_id: string;
@@ -83,6 +106,7 @@ export interface CreateExpensePayload {
   excluded_users?: string[];
   // For 'adjustment' splits: map of user_id -> extra amount
   adjustments?: Record<string, number>;
+  spotify_track?: ExpenseSpotifyTrack | null;
 }
 
 export interface UpdateExpensePayload extends Partial<CreateExpensePayload> {
@@ -130,6 +154,17 @@ export interface GroupWithDetails extends Group {
   pending_settlements: number;
 }
 
+export interface GroupLeaderboardEntry {
+  user_id: string;
+  name: string;
+  email: string;
+  total_paid: number;
+  settled_paid: number;
+  settleups_confirmed: number;
+  score: number;
+  rank: number;
+}
+
 export interface GroupInvitation {
   group_id: string;
   group_name: string;
@@ -142,6 +177,8 @@ export interface GroupInvitation {
 export interface ExpenseWithDetails extends Expense {
   paid_by_name: string;
   splits: Array<ExpenseSplit & { user_name: string }>;
+  attachments: ExpenseAttachment[];
+  spotify_track?: ExpenseSpotifyTrack | null;
 }
 
 export interface Activity {

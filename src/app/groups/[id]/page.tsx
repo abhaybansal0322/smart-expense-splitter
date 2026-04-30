@@ -7,9 +7,9 @@ import { Avatar } from '@/components/GroupComponents';
 import { AddExpenseModal } from '@/components/AddExpenseModal';
 import { PendingSettlementCard, SettlementCard } from '@/components/SettlementCard';
 import { useToast } from '@/components/Toast';
-import { Activity, ExpenseWithDetails, GroupWithDetails, SettlementRecord, SettlementTransaction, User, UserBalance } from '@/lib/types';
+import { Activity, ExpenseWithDetails, GroupLeaderboardEntry, GroupWithDetails, SettlementRecord, SettlementTransaction, User, UserBalance } from '@/lib/types';
 
-type Tab = 'expenses' | 'balances' | 'settlements' | 'members' | 'activity';
+type Tab = 'expenses' | 'balances' | 'settlements' | 'leaderboard' | 'members' | 'activity';
 
 const SPLIT_TYPE_LABELS: Record<string, string> = {
   equal: 'Equal',
@@ -26,6 +26,7 @@ export default function GroupPage() {
   const [group, setGroup] = useState<GroupWithDetails | null>(null);
   const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([]);
   const [balances, setBalances] = useState<UserBalance[]>([]);
+  const [leaderboard, setLeaderboard] = useState<GroupLeaderboardEntry[]>([]);
   const [settlements, setSettlements] = useState<SettlementTransaction[]>([]);
   const [settlementRecords, setSettlementRecords] = useState<SettlementRecord[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export default function GroupPage() {
       setGroup(data.group);
       setExpenses(data.expenses ?? []);
       setBalances(data.balances ?? []);
+      setLeaderboard(data.leaderboard ?? []);
 
       if (data.settlements) {
         setSettlements(data.settlements.plan ?? []);
@@ -137,6 +139,7 @@ export default function GroupPage() {
     { id: 'expenses', label: 'Expenses', count: expenses.length },
     { id: 'balances', label: 'Balances', count: balances.length },
     { id: 'settlements', label: 'Settle Up', count: settlements.length },
+    { id: 'leaderboard', label: 'Leaderboard', count: leaderboard.length },
     { id: 'members', label: 'Members', count: members.length },
     { id: 'activity', label: 'Activity' },
   ];
@@ -232,6 +235,9 @@ export default function GroupPage() {
               onChanged={fetchAll}
               showToast={show}
             />
+          )}
+          {tab === 'leaderboard' && (
+            <LeaderboardTab leaderboard={leaderboard} />
           )}
           {tab === 'members' && (
             <MembersTab
@@ -379,6 +385,53 @@ function ExpenseRow({ expense, onRefresh, showToast, onEdit }: { expense: Expens
       {expanded && (
         <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border)' }}>
           <div style={{ marginTop: 16 }}>
+            {(expense.spotify_track || expense.attachments?.length > 0) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+                {expense.spotify_track && (
+                  <a
+                    href={expense.spotify_track.spotify_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 12,
+                      border: '1px solid rgba(34, 211, 160, 0.25)',
+                      background: 'rgba(34, 211, 160, 0.08)',
+                      textDecoration: 'none',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {expense.spotify_track.album_image_url && (
+                      <span
+                        aria-hidden="true"
+                        style={{ width: 48, height: 48, borderRadius: 8, backgroundImage: `url(${expense.spotify_track.album_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0 }}
+                      />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: 'var(--accent-success)', fontWeight: 700 }}>Spotify vibe</div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{expense.spotify_track.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{expense.spotify_track.artist}</div>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--accent-success)', fontWeight: 700 }}>Open</span>
+                  </a>
+                )}
+                {expense.attachments?.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+                    {expense.attachments.map((attachment) => (
+                      <a key={attachment.id} href={attachment.file_url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                        <span
+                          aria-label={attachment.original_name}
+                          style={{ display: 'block', width: '100%', aspectRatio: '1 / 1', backgroundImage: `url(${attachment.file_url})`, backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: 10, border: '1px solid var(--border)' }}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
                 Split Breakdown
@@ -578,6 +631,48 @@ function SettlementsTab({
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function LeaderboardTab({ leaderboard }: { leaderboard: GroupLeaderboardEntry[] }) {
+  if (leaderboard.length === 0) {
+    return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>No leaderboard data yet</div>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {leaderboard.map((entry) => (
+        <div key={entry.user_id} className="glass-card" style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: '56px 1fr auto', alignItems: 'center', gap: 16 }}>
+          <div style={{
+            width: 42,
+            height: 42,
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 900,
+            color: entry.rank === 1 ? '#f59e0b' : 'var(--text-secondary)',
+            background: entry.rank === 1 ? 'rgba(245, 158, 11, 0.14)' : 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+          }}>
+            #{entry.rank}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 800 }}>{entry.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{entry.email}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              <span className="badge badge-purple">Paid Rs. {entry.total_paid.toFixed(2)}</span>
+              <span className="badge badge-green">Settled Rs. {entry.settled_paid.toFixed(2)}</span>
+              <span className="badge">{entry.settleups_confirmed} settle ups</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--accent-primary)' }}>{entry.score.toFixed(0)}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>smart score</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

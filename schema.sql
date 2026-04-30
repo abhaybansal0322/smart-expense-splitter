@@ -62,6 +62,30 @@ CREATE TABLE IF NOT EXISTS expense_splits (
   UNIQUE (expense_id, user_id)
 );
 
+-- Fun expense add-ons visible to all accepted group members.
+CREATE TABLE IF NOT EXISTS expense_attachments (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  expense_id    UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  file_url      TEXT NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type     VARCHAR(100) NOT NULL,
+  size_bytes    INTEGER NOT NULL CHECK (size_bytes > 0),
+  uploaded_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS expense_spotify_tracks (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  expense_id       UUID NOT NULL UNIQUE REFERENCES expenses(id) ON DELETE CASCADE,
+  spotify_track_id VARCHAR(255) NOT NULL,
+  spotify_url      TEXT NOT NULL,
+  name             VARCHAR(255) NOT NULL,
+  artist           VARCHAR(255) NOT NULL,
+  album_name       VARCHAR(255),
+  album_image_url  TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ─────────────── Settlements ───────────────
 DO $$ BEGIN
     CREATE TYPE settlement_status AS ENUM ('pending', 'confirmed', 'cancelled');
@@ -102,6 +126,8 @@ CREATE INDEX IF NOT EXISTS idx_expenses_group         ON expenses(group_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_paid_by       ON expenses(paid_by);
 CREATE INDEX IF NOT EXISTS idx_expense_splits_expense ON expense_splits(expense_id);
 CREATE INDEX IF NOT EXISTS idx_expense_splits_user    ON expense_splits(user_id);
+CREATE INDEX IF NOT EXISTS idx_expense_attachments_expense ON expense_attachments(expense_id);
+CREATE INDEX IF NOT EXISTS idx_expense_spotify_tracks_expense ON expense_spotify_tracks(expense_id);
 CREATE INDEX IF NOT EXISTS idx_settlements_group      ON settlements(group_id);
 CREATE INDEX IF NOT EXISTS idx_settlements_from_user  ON settlements(from_user);
 CREATE INDEX IF NOT EXISTS idx_settlements_to_user    ON settlements(to_user);
@@ -142,6 +168,32 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_join_code ON groups(join_code);
 
 -- Standardize password storage for databases created before password_hash existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+
+CREATE TABLE IF NOT EXISTS expense_attachments (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  expense_id    UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  file_url      TEXT NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type     VARCHAR(100) NOT NULL,
+  size_bytes    INTEGER NOT NULL CHECK (size_bytes > 0),
+  uploaded_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS expense_spotify_tracks (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  expense_id       UUID NOT NULL UNIQUE REFERENCES expenses(id) ON DELETE CASCADE,
+  spotify_track_id VARCHAR(255) NOT NULL,
+  spotify_url      TEXT NOT NULL,
+  name             VARCHAR(255) NOT NULL,
+  artist           VARCHAR(255) NOT NULL,
+  album_name       VARCHAR(255),
+  album_image_url  TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_expense_attachments_expense ON expense_attachments(expense_id);
+CREATE INDEX IF NOT EXISTS idx_expense_spotify_tracks_expense ON expense_spotify_tracks(expense_id);
 
 DO $$ 
 BEGIN 

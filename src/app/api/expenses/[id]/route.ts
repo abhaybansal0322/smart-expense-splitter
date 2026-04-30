@@ -17,6 +17,14 @@ const UpdateExpenseSchema = z.object({
   percentages: z.record(z.string().uuid(), z.number()).optional(),
   excluded_users: z.array(z.string().uuid()).optional(),
   adjustments: z.record(z.string().uuid(), z.number()).optional(),
+  spotify_track: z.object({
+    spotify_track_id: z.string().min(1),
+    spotify_url: z.string().url(),
+    name: z.string().min(1).max(255),
+    artist: z.string().min(1).max(255),
+    album_name: z.string().max(255).optional(),
+    album_image_url: z.string().url().optional(),
+  }).nullable().optional(),
 });
 
 type Params = { params: Promise<{ id: string }> };

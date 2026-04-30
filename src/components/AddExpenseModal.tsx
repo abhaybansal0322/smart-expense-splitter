@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { User, SplitType, ExpenseWithDetails } from '@/lib/types';
+import { User, SplitType, ExpenseWithDetails, ExpenseSpotifyTrack } from '@/lib/types';
 
 interface AddExpenseModalProps {
   groupId: string;
@@ -64,6 +64,11 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
     return [];
   });
   const [adjustments, setAdjustments] = useState<Record<string, string>>({});
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [spotifyQuery, setSpotifyQuery] = useState('');
+  const [spotifyResults, setSpotifyResults] = useState<ExpenseSpotifyTrack[]>([]);
+  const [selectedSpotifyTrack, setSelectedSpotifyTrack] = useState<ExpenseSpotifyTrack | null>(initialExpense?.spotify_track ?? null);
+  const [searchingSpotify, setSearchingSpotify] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -126,6 +131,12 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
       if (adjTotal > totalAmt) return setError(`Total extra amounts (₹${adjTotal}) cannot exceed the total expense (₹${totalAmt})`);
     }
 
+    if (selectedSpotifyTrack) {
+      payload.spotify_track = selectedSpotifyTrack;
+    } else if (initialExpense?.spotify_track) {
+      payload.spotify_track = null;
+    }
+
     setLoading(true);
     try {
       const url = initialExpense ? `/api/expenses/${initialExpense.id}` : '/api/expenses';
@@ -137,11 +148,40 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
       });
       const data = await res.json();
       if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : (initialExpense ? 'Failed to update expense' : 'Failed to add expense'));
+      const expenseId = initialExpense?.id ?? data.expenseId;
+
+      if (imageFiles.length > 0) {
+        const formData = new FormData();
+        imageFiles.forEach((file) => formData.append('images', file));
+        const uploadRes = await fetch(`/api/expenses/${expenseId}/attachments`, {
+          method: 'POST',
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || 'Failed to upload images');
+      }
+
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSpotifySearch = async () => {
+    if (spotifyQuery.trim().length < 2) return setError('Enter at least 2 characters to search Spotify');
+    setSearchingSpotify(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/spotify/search?q=${encodeURIComponent(spotifyQuery)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to search Spotify');
+      setSpotifyResults(data.tracks ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Spotify search failed');
+    } finally {
+      setSearchingSpotify(false);
     }
   };
 
@@ -320,6 +360,96 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
               <div style={{ marginTop: 8, fontSize: 12, color: remainingForEqual >= 0 ? 'var(--text-secondary)' : 'var(--accent-danger)' }}>
                 Total extra: ₹{adjTotal.toFixed(2)} | Remaining to split equally: ₹{remainingForEqual.toFixed(2)}
                 {remainingForEqual < 0 && ' (Exceeds total!)'}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="form-label">Fun Images</label>
+            <input
+              className="form-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(e) => setImageFiles(Array.from(e.target.files ?? []).slice(0, 4))}
+            />
+            {imageFiles.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                {imageFiles.map((file) => (
+                  <span key={`${file.name}-${file.size}`} className="badge badge-purple" style={{ fontSize: 11 }}>
+                    {file.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="form-label">Spotify Song</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="form-input"
+                placeholder="Search a song"
+                value={spotifyQuery}
+                onChange={(e) => setSpotifyQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSpotifySearch()}
+                style={{ flex: 1 }}
+              />
+              <button className="btn-secondary" onClick={handleSpotifySearch} disabled={searchingSpotify} style={{ flexShrink: 0 }}>
+                {searchingSpotify ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+
+            {selectedSpotifyTrack && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, padding: 10, borderRadius: 10, background: 'rgba(34, 211, 160, 0.08)', border: '1px solid rgba(34, 211, 160, 0.25)' }}>
+                {selectedSpotifyTrack.album_image_url && (
+                  <div
+                    aria-hidden="true"
+                    style={{ width: 42, height: 42, borderRadius: 6, backgroundImage: `url(${selectedSpotifyTrack.album_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0 }}
+                  />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{selectedSpotifyTrack.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selectedSpotifyTrack.artist}</div>
+                </div>
+                <button className="btn-secondary" onClick={() => setSelectedSpotifyTrack(null)} style={{ padding: '5px 9px', fontSize: 12 }}>Remove</button>
+              </div>
+            )}
+
+            {spotifyResults.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
+                {spotifyResults.map((track) => (
+                  <button
+                    key={track.spotify_track_id}
+                    onClick={() => {
+                      setSelectedSpotifyTrack(track);
+                      setSpotifyResults([]);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: 8,
+                      borderRadius: 10,
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-elevated)',
+                      color: 'var(--text-primary)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {track.album_image_url && (
+                      <span
+                        aria-hidden="true"
+                        style={{ width: 36, height: 36, borderRadius: 6, backgroundImage: `url(${track.album_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0 }}
+                      />
+                    )}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{track.name}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>{track.artist}</span>
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
