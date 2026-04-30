@@ -40,22 +40,19 @@ export default function GroupPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [groupRes, expRes, balRes, setRes] = await Promise.all([
-        fetch(`/api/groups/${groupId}`),
-        fetch(`/api/expenses/group/${groupId}`),
-        fetch(`/api/groups/${groupId}/balances`),
-        fetch(`/api/groups/${groupId}/settlements`),
-      ]);
-      const [gd, ed, bd, sd] = await Promise.all([
-        groupRes.json(), expRes.json(), balRes.json(), setRes.json(),
-      ]);
-      if (!groupRes.ok) { router.push('/'); return; }
-      setGroup(gd.group);
-      setExpenses(ed.expenses ?? []);
-      setBalances(bd.balances ?? []);
-      setSettlements(sd.plan ?? []);
-      setSettlementRecords(sd.settlements ?? []);
-      setCurrentUserId(sd.current_user_id ?? null);
+      const res = await fetch(`/api/groups/${groupId}/details`);
+      const data = await res.json();
+      if (!res.ok) { router.push('/'); return; }
+      
+      setGroup(data.group);
+      setExpenses(data.expenses ?? []);
+      setBalances(data.balances ?? []);
+      
+      if (data.settlements) {
+        setSettlements(data.settlements.plan ?? []);
+        setSettlementRecords(data.settlements.settlements ?? []);
+        setCurrentUserId(data.settlements.current_user_id ?? null);
+      }
     } catch (err) {
       console.error("fetchAll error", err);
       show('Failed to load group data', 'error');
