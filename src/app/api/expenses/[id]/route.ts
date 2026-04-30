@@ -11,11 +11,12 @@ const UpdateExpenseSchema = z.object({
   amount: z.number().positive().optional(),
   description: z.string().min(1).max(500).optional(),
   category: z.string().max(100).optional(),
-  split_type: z.enum(['equal', 'exact', 'percentage', 'exclude']).optional(),
+  split_type: z.enum(['equal', 'exact', 'percentage', 'exclude', 'adjustment']).optional(),
   participants: z.array(z.string().uuid()).min(1).optional(),
   exact_amounts: z.record(z.string().uuid(), z.number()).optional(),
   percentages: z.record(z.string().uuid(), z.number()).optional(),
   excluded_users: z.array(z.string().uuid()).optional(),
+  adjustments: z.record(z.string().uuid(), z.number()).optional(),
 });
 
 type Params = { params: Promise<{ id: string }> };

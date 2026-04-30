@@ -71,8 +71,29 @@ function computeExcludeSplit(
   return computeEqualSplit(amount, included);
 }
 
+function computeAdjustmentSplit(
+  amount: number,
+  participants: string[],
+  adjustments: Record<string, number>
+): Record<string, number> {
+  const totalAdjustments = Object.values(adjustments).reduce((s, v) => s + v, 0);
+  if (totalAdjustments > amount) {
+    throw new Error(`Total adjustments (${totalAdjustments}) cannot exceed total amount (${amount})`);
+  }
+  const remainingAmount = parseFloat((amount - totalAdjustments).toFixed(2));
+  
+  // The remaining amount is split equally among participants
+  const equalShares = computeEqualSplit(remainingAmount, participants);
+  
+  const shares: Record<string, number> = {};
+  participants.forEach(uid => {
+    shares[uid] = parseFloat(((equalShares[uid] || 0) + (adjustments[uid] || 0)).toFixed(2));
+  });
+  return shares;
+}
+
 export function computeSplits(payload: CreateExpensePayload): Record<string, number> {
-  const { amount, split_type, participants, exact_amounts, percentages, excluded_users } =
+  const { amount, split_type, participants, exact_amounts, percentages, excluded_users, adjustments } =
     payload;
 
   let shares: Record<string, number>;
@@ -90,6 +111,10 @@ export function computeSplits(payload: CreateExpensePayload): Record<string, num
       break;
     case 'exclude':
       shares = computeExcludeSplit(amount, participants, excluded_users ?? []);
+      break;
+    case 'adjustment':
+      if (!adjustments) throw new Error('adjustments required for split_type=adjustment');
+      shares = computeAdjustmentSplit(amount, participants, adjustments);
       break;
     default:
       throw new Error(`Unknown split_type: ${split_type}`);
@@ -249,7 +274,7 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
       [updatedAmount, updatedDesc, updatedCat, updatedSplitType, payload.expense_id]
     );
 
-    if (payload.participants || payload.split_type || payload.amount || payload.exact_amounts || payload.percentages || payload.excluded_users) {
+    if (payload.participants || payload.split_type || payload.amount || payload.exact_amounts || payload.percentages || payload.excluded_users || payload.adjustments) {
       // recompute splits
       const fullPayload = {
         group_id: existing.group_id,
@@ -262,6 +287,7 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
         exact_amounts: payload.exact_amounts,
         percentages: payload.percentages,
         excluded_users: payload.excluded_users,
+        adjustments: payload.adjustments,
       };
 
       // If participants not provided, fetch current participants

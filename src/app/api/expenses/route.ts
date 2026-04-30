@@ -12,11 +12,12 @@ const CreateExpenseSchema = z.object({
   paid_by: z.string().uuid(),
   amount: z.number().positive(),
   description: z.string().min(1).max(500),
-  split_type: z.enum(['equal', 'exact', 'percentage', 'exclude'] as [SplitType, ...SplitType[]]),
+  split_type: z.enum(['equal', 'exact', 'percentage', 'exclude', 'adjustment'] as [SplitType, ...SplitType[]]),
   participants: z.array(z.string().uuid()).min(1),
   exact_amounts: z.record(z.string().uuid(), z.number().nonnegative()).optional(),
   percentages: z.record(z.string().uuid(), z.number().nonnegative()).optional(),
   excluded_users: z.array(z.string().uuid()).optional(),
+  adjustments: z.record(z.string().uuid(), z.number().nonnegative()).optional(),
 });
 
 export async function POST(req: NextRequest) {

@@ -51,7 +51,7 @@ export interface Settlement {
 }
 
 // ─────────────── Enums ───────────────
-export type SplitType = 'equal' | 'exact' | 'percentage' | 'exclude';
+export type SplitType = 'equal' | 'exact' | 'percentage' | 'exclude' | 'adjustment';
 export type SettlementStatus = 'pending' | 'confirmed' | 'cancelled';
 
 // ─────────────── API Payload Types ───────────────
@@ -75,6 +75,8 @@ export interface CreateExpensePayload {
   percentages?: Record<string, number>;
   // For 'exclude' splits: user_ids to exclude
   excluded_users?: string[];
+  // For 'adjustment' splits: map of user_id -> extra amount
+  adjustments?: Record<string, number>;
 }
 
 export interface UpdateExpensePayload extends Partial<CreateExpensePayload> {

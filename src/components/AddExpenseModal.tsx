@@ -13,6 +13,7 @@ interface AddExpenseModalProps {
 
 const SPLIT_TYPES: { value: SplitType; label: string; desc: string }[] = [
   { value: 'equal',      label: 'Equal',      desc: 'Split evenly among all' },
+  { value: 'adjustment', label: 'Itemized',   desc: 'Add extra amounts (e.g. drinks)' },
   { value: 'exact',      label: 'Exact',      desc: 'Specify exact amounts' },
   { value: 'percentage', label: 'Percentage', desc: 'Split by percentage' },
   { value: 'exclude',    label: 'Exclude',    desc: 'Exclude specific users' },
@@ -62,6 +63,7 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
     }
     return [];
   });
+  const [adjustments, setAdjustments] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -76,6 +78,8 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
   // Compute exact total for validation display
   const exactTotal = Object.values(exactAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0);
   const pctTotal = Object.values(percentages).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const adjTotal = Object.values(adjustments).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const remainingForEqual = totalAmt - adjTotal;
 
   const handleSubmit = async () => {
     setError('');
@@ -111,6 +115,15 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
 
     if (splitType === 'exclude') {
       payload.excluded_users = excludedUsers;
+    }
+
+    if (splitType === 'adjustment') {
+      const adjMap: Record<string, number> = {};
+      for (const uid of participants) {
+        adjMap[uid] = parseFloat(adjustments[uid] || '0');
+      }
+      payload.adjustments = adjMap;
+      if (adjTotal > totalAmt) return setError(`Total extra amounts (₹${adjTotal}) cannot exceed the total expense (₹${totalAmt})`);
     }
 
     setLoading(true);
@@ -169,7 +182,7 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
           {/* Split Type */}
           <div>
             <label className="form-label">Split Type</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
               {SPLIT_TYPES.map((st) => (
                 <button
                   key={st.value}
@@ -255,6 +268,21 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
                       </div>
                     )}
 
+                    {/* Adjustment input */}
+                    {splitType === 'adjustment' && isParticipant && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>+ ₹</span>
+                        <input
+                          type="number"
+                          className="form-input"
+                          style={{ width: 80, padding: '6px 8px', fontSize: 13 }}
+                          placeholder="Extra"
+                          value={adjustments[m.id] ?? ''}
+                          onChange={(e) => setAdjustments({ ...adjustments, [m.id]: e.target.value })}
+                        />
+                      </div>
+                    )}
+
                     {/* Exclude checkbox */}
                     {splitType === 'exclude' && (
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--accent-danger)' }}>
@@ -286,6 +314,12 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
             {splitType === 'percentage' && (
               <div style={{ marginTop: 8, fontSize: 12, color: Math.abs(pctTotal - 100) < 0.01 ? 'var(--accent-success)' : 'var(--accent-warning)' }}>
                 Total: {pctTotal.toFixed(1)}% / 100%
+              </div>
+            )}
+            {splitType === 'adjustment' && totalAmt > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: remainingForEqual >= 0 ? 'var(--text-secondary)' : 'var(--accent-danger)' }}>
+                Total extra: ₹{adjTotal.toFixed(2)} | Remaining to split equally: ₹{remainingForEqual.toFixed(2)}
+                {remainingForEqual < 0 && ' (Exceeds total!)'}
               </div>
             )}
           </div>

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 
 -- ─────────────── Expenses ───────────────
 DO $$ BEGIN
-    CREATE TYPE split_type AS ENUM ('equal', 'exact', 'percentage', 'exclude');
+    CREATE TYPE split_type AS ENUM ('equal', 'exact', 'percentage', 'exclude', 'adjustment');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
