@@ -6,7 +6,7 @@ import { getAuthSession } from '@/lib/auth';
 const CreateGroupSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(500).optional(),
-  memberEmails: z.array(z.string().email()).min(1),
+  memberEmails: z.array(z.string().email()).optional().default([]),
 });
 
 export async function GET() {
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
     if (!memberEmails.includes(sessionEmail)) {
       memberEmails.push(sessionEmail);
     }
-    const groupId = await createGroup(name, description, [...new Set(memberEmails)], session.user.id, sessionEmail);
-    return NextResponse.json({ groupId }, { status: 201 });
+    const group = await createGroup(name, description, [...new Set(memberEmails)], session.user.id, sessionEmail);
+    return NextResponse.json(group, { status: 201 });
   } catch (error) {
     console.error('POST /api/groups error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create group';

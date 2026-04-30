@@ -93,9 +93,9 @@ export function Navbar() {
               <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
                 {session.user?.name?.split(' ')[0]}
               </span>
-              <button 
+              <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
-                className="btn-secondary" 
+                className="btn-secondary"
                 style={{ padding: '6px 12px', fontSize: '13px' }}
               >
                 Logout

@@ -43,11 +43,11 @@ export default function GroupPage() {
       const res = await fetch(`/api/groups/${groupId}/details`);
       const data = await res.json();
       if (!res.ok) { router.push('/'); return; }
-      
+
       setGroup(data.group);
       setExpenses(data.expenses ?? []);
       setBalances(data.balances ?? []);
-      
+
       if (data.settlements) {
         setSettlements(data.settlements.plan ?? []);
         setSettlementRecords(data.settlements.settlements ?? []);
@@ -109,6 +109,12 @@ export default function GroupPage() {
     }
   };
 
+  const copyJoinCode = async () => {
+    if (!group?.join_code) return;
+    await navigator.clipboard?.writeText(group.join_code);
+    show('Group code copied', 'success');
+  };
+
   if (loading) {
     return (
       <>
@@ -151,6 +157,17 @@ export default function GroupPage() {
           <div>
             <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 6 }}>{group.name}</h1>
             {group.description && <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{group.description}</p>}
+            {group.join_code && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Group Code</span>
+                <span style={{ padding: '6px 12px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--accent-primary)', fontWeight: 800, letterSpacing: 1 }}>
+                  {group.join_code}
+                </span>
+                <button className="btn-secondary" onClick={copyJoinCode} style={{ padding: '6px 12px', fontSize: 12 }}>
+                  Copy
+                </button>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
               <StatPill label="Members" value={members.length} />
               <StatPill label="Total Spent" value={`₹${(group.total_expenses ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} />
@@ -513,27 +530,27 @@ function SettlementsTab({
       )}
       {actionableSettlements.length > 0 && (
         <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: '14px 20px', background: 'rgba(124,111,255,0.08)', border: '1px solid rgba(124,111,255,0.2)', borderRadius: 12 }}>
-        <span style={{ fontSize: 18 }}>⚡</span>
-        <div>
-          <p style={{ fontWeight: 600, fontSize: 14 }}>Optimized Settlement Plan</p>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Enter any amount up to the suggested amount. The receiver must confirm before balances change.
-          </p>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: '14px 20px', background: 'rgba(124,111,255,0.08)', border: '1px solid rgba(124,111,255,0.2)', borderRadius: 12 }}>
+            <span style={{ fontSize: 18 }}>⚡</span>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: 14 }}>Optimized Settlement Plan</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Enter any amount up to the suggested amount. The receiver must confirm before balances change.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {actionableSettlements.map((txn, i) => (
-          <SettlementCard
-            key={`${txn.from_user_id}-${txn.to_user_id}-${i}`}
-            transaction={txn}
-            groupId={groupId}
-            currentUserId={currentUserId}
-            onChanged={onChanged}
-            onError={(message) => showToast(message, 'error')}
-          />
-        ))}
-      </div>
+              <SettlementCard
+                key={`${txn.from_user_id}-${txn.to_user_id}-${i}`}
+                transaction={txn}
+                groupId={groupId}
+                currentUserId={currentUserId}
+                onChanged={onChanged}
+                onError={(message) => showToast(message, 'error')}
+              />
+            ))}
+          </div>
         </>
       )}
       {historyRecords.length > 0 && (

@@ -12,6 +12,7 @@ export interface Group {
   id: string;
   name: string;
   description?: string;
+  join_code?: string;
   created_at: string;
 }
 
@@ -58,7 +59,12 @@ export type SettlementStatus = 'pending' | 'confirmed' | 'cancelled';
 export interface CreateGroupPayload {
   name: string;
   description?: string;
-  memberEmails: string[];
+  memberEmails?: string[];
+}
+
+export interface CreateGroupResponse {
+  groupId: string;
+  joinCode: string;
 }
 
 export interface CreateExpensePayload {

@@ -12,11 +12,11 @@ interface AddExpenseModalProps {
 }
 
 const SPLIT_TYPES: { value: SplitType; label: string; desc: string }[] = [
-  { value: 'equal',      label: 'Equal',      desc: 'Split evenly among all' },
-  { value: 'adjustment', label: 'Itemized',   desc: 'Add extra amounts (e.g. drinks)' },
-  { value: 'exact',      label: 'Exact',      desc: 'Specify exact amounts' },
+  { value: 'equal', label: 'Equal', desc: 'Split evenly among all' },
+  { value: 'adjustment', label: 'Itemized', desc: 'Add extra amounts (e.g. drinks)' },
+  { value: 'exact', label: 'Exact', desc: 'Specify exact amounts' },
   { value: 'percentage', label: 'Percentage', desc: 'Split by percentage' },
-  { value: 'exclude',    label: 'Exclude',    desc: 'Exclude specific users' },
+  { value: 'exclude', label: 'Exclude', desc: 'Exclude specific users' },
 ];
 
 export function AddExpenseModal({ groupId, members, onClose, onCreated, initialExpense }: AddExpenseModalProps) {
@@ -24,10 +24,10 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
   const [amount, setAmount] = useState(initialExpense ? String(initialExpense.amount) : '');
   const [paidBy, setPaidBy] = useState(initialExpense?.paid_by ?? members[0]?.id ?? '');
   const [splitType, setSplitType] = useState<SplitType>(initialExpense?.split_type ?? 'equal');
-  
+
   const [participants, setParticipants] = useState<string[]>(
-    initialExpense 
-      ? initialExpense.splits.map(s => s.user_id) 
+    initialExpense
+      ? initialExpense.splits.map(s => s.user_id)
       : members.map((m) => m.id)
   );
 

@@ -1,10 +1,20 @@
 import { query, withTransaction } from '@/lib/db';
 import { GroupInvitation, GroupWithDetails, User } from '@/lib/types';
+import {
+  createUniqueJoinCode,
+  joinGroupByCodeWithClient,
+  JoinedGroup,
+} from './groupJoinService';
 
 interface UserLookupRow {
   id: string;
   name: string;
   email: string;
+}
+
+export interface CreatedGroup {
+  groupId: string;
+  joinCode: string;
 }
 
 export async function createGroup(
@@ -13,7 +23,7 @@ export async function createGroup(
   memberEmails: string[],
   creatorUserId: string,
   creatorEmail: string
-): Promise<string> {
+): Promise<CreatedGroup> {
   return withTransaction(async (client) => {
     const normalizedCreatorEmail = creatorEmail.trim().toLowerCase();
     const inviteEmails = [...new Set(
@@ -34,10 +44,12 @@ export async function createGroup(
       }
     }
 
+    const joinCode = await createUniqueJoinCode(client);
+
     // Create group
     const groupResult = await client.query<{ id: string }>(
-      `INSERT INTO groups (name, description) VALUES ($1, $2) RETURNING id`,
-      [name, description ?? null]
+      `INSERT INTO groups (name, description, join_code) VALUES ($1, $2, $3) RETURNING id`,
+      [name, description ?? null, joinCode]
     );
     const groupId = groupResult.rows[0].id;
 
@@ -67,8 +79,12 @@ export async function createGroup(
       }
     }
 
-    return groupId;
+    return { groupId, joinCode };
   });
+}
+
+export async function joinGroupByCode(code: string, userId: string): Promise<JoinedGroup> {
+  return withTransaction((client) => joinGroupByCodeWithClient(client, code, userId));
 }
 
 export async function inviteMemberToGroup(groupId: string, email: string): Promise<void> {
@@ -170,7 +186,7 @@ export async function respondToGroupInvitation(
 export async function getGroupsForUser(userId: string): Promise<GroupWithDetails[]> {
   const { rows } = await query<GroupWithDetails>(
     `SELECT
-       g.id, g.name, g.description, g.created_at,
+       g.id, g.name, g.description, g.join_code, g.created_at,
        (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id AND status = 'accepted') AS member_count,
        (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id AND deleted_at IS NULL) AS total_expenses,
        (SELECT COUNT(*)::int FROM settlements WHERE group_id = g.id AND status = 'pending') AS pending_settlements,
@@ -199,7 +215,7 @@ export async function getGroupsForUser(userId: string): Promise<GroupWithDetails
 export async function getGroupById(groupId: string): Promise<GroupWithDetails | null> {
   const { rows } = await query<GroupWithDetails>(
     `SELECT
-       g.id, g.name, g.description, g.created_at,
+       g.id, g.name, g.description, g.join_code, g.created_at,
        (SELECT COUNT(*)::int FROM group_members WHERE group_id = g.id AND status = 'accepted') AS member_count,
        (SELECT COALESCE(SUM(amount), 0)::float FROM expenses WHERE group_id = g.id AND deleted_at IS NULL) AS total_expenses,
        (SELECT COUNT(*)::int FROM settlements WHERE group_id = g.id AND status = 'pending') AS pending_settlements,

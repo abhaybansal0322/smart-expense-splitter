@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { signIn } from 'next-auth/react';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -36,6 +37,10 @@ export default function SignupPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSignUp = () => {
+    signIn('google', { callbackUrl: '/' });
   };
 
   return (
@@ -91,6 +96,16 @@ export default function SignupPage() {
             {loading ? 'Creating account...' : 'Sign Up'}
           </button>
         </form>
+
+        <div className="divider" style={{ margin: '24px 0' }} />
+
+        <button
+          onClick={handleGoogleSignUp}
+          className="btn-secondary"
+          style={{ width: '100%', justifyContent: 'center', opacity: 1 }}
+        >
+          Sign up with Google
+        </button>
 
         <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: 'var(--text-secondary)' }}>
           Already have an account? <Link href="/login" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>Sign in</Link>

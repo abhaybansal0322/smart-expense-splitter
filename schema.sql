@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS groups (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        VARCHAR(255) NOT NULL,
   description TEXT,
+  join_code   VARCHAR(16) NOT NULL UNIQUE DEFAULT upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6)),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -123,6 +124,21 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NUL
 CREATE INDEX IF NOT EXISTS idx_expenses_id ON expenses(id);
 CREATE INDEX IF NOT EXISTS idx_users_id ON users(id);
 CREATE INDEX IF NOT EXISTS idx_groups_id ON groups(id);
+
+-- Stable join code for code-based group joining.
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS join_code VARCHAR(16);
+ALTER TABLE groups ALTER COLUMN join_code TYPE VARCHAR(16);
+WITH numbered_groups AS (
+  SELECT id, row_number() OVER (ORDER BY created_at, id) AS position
+  FROM groups
+  WHERE join_code IS NULL
+)
+UPDATE groups
+SET join_code = upper(substr(replace(groups.id::text, '-', ''), 1, 6)) || lpad(numbered_groups.position::text, 4, '0')
+FROM numbered_groups
+WHERE groups.id = numbered_groups.id;
+ALTER TABLE groups ALTER COLUMN join_code SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_join_code ON groups(join_code);
 
 -- Standardize password storage for databases created before password_hash existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Navbar } from '@/components/Navbar';
-import { CreateGroupModal } from '@/components/GroupComponents';
+import { CreateGroupModal, JoinGroupModal } from '@/components/GroupComponents';
 import { useToast } from '@/components/Toast';
 import { useRouter } from 'next/navigation';
 import { GroupInvitation, GroupWithDetails } from '@/lib/types';
@@ -15,6 +15,7 @@ export default function GroupsPage() {
   const [loading, setLoading] = useState(true);
   const [updatingInvitation, setUpdatingInvitation] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
   const { show, ToastContainer } = useToast();
   const router = useRouter();
 
@@ -69,7 +70,10 @@ export default function GroupsPage() {
             <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>All Groups</h1>
             <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>Manage all your expense groups</p>
           </div>
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>+ New Group</button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn-secondary" onClick={() => setShowJoin(true)}>Join with code</button>
+            <button className="btn-primary" onClick={() => setShowCreate(true)}>+ New Group</button>
+          </div>
         </div>
 
         {invitations.length > 0 && (
@@ -115,6 +119,11 @@ export default function GroupsPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{g.name}</div>
                     {g.description && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{g.description}</div>}
+                    {g.join_code && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                        Code <span style={{ color: 'var(--accent-primary)', fontWeight: 700, letterSpacing: 1 }}>{g.join_code}</span>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {Array.isArray(g.members) && g.members.slice(0, 4).map((m, i) => (
@@ -141,6 +150,16 @@ export default function GroupsPage() {
           onCreated={(id) => {
             setShowCreate(false);
             show('Group created!', 'success');
+            router.push(`/groups/${id}`);
+          }}
+        />
+      )}
+      {showJoin && (
+        <JoinGroupModal
+          onClose={() => setShowJoin(false)}
+          onJoined={(id) => {
+            setShowJoin(false);
+            show('Group joined!', 'success');
             router.push(`/groups/${id}`);
           }}
         />
