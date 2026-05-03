@@ -519,11 +519,7 @@ function BalancesTab({ balances }: { balances: UserBalance[] }) {
                 borderRadius: 3, transition: 'width 0.5s ease',
               }} />
             </div>
-            {b.upi_id && (
-              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                UPI: <span style={{ color: 'var(--accent-primary)' }}>{b.upi_id}</span>
-              </div>
-            )}
+
           </div>
         );
       })}
@@ -717,11 +713,7 @@ function MembersTab({
               <div style={{ fontWeight: 600, fontSize: 15 }}>{m.name}</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{m.email}</div>
             </div>
-            {m.upi_id && (
-              <span className="badge badge-green" style={{ fontSize: 11 }}>
-                UPI ✓
-              </span>
-            )}
+
           </div>
         ))}
       </div>

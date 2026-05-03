@@ -12,8 +12,8 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // Fetch user details including upi_id
-    const res = await query<{id: string, name: string, email: string, upi_id?: string}>('SELECT id, name, email, upi_id FROM users WHERE id = $1', [userId]);
+    // Fetch user details
+    const res = await query<{id: string, name: string, email: string}>('SELECT id, name, email FROM users WHERE id = $1', [userId]);
 
     if (res.rowCount === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });

@@ -23,8 +23,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const [plan, { rows: saved }] = await Promise.all([
       getSettlementPlan(id),
       query(
-        `SELECT s.id, s.from_user, s.to_user, s.amount::float, s.status, s.upi_reference, s.created_at, s.confirmed_at,
-                fu.name AS from_name, tu.name AS to_name, tu.upi_id AS to_upi_id
+        `SELECT s.id, s.from_user, s.to_user, s.amount::float, s.status, s.created_at, s.confirmed_at,
+                fu.name AS from_name, tu.name AS to_name
          FROM settlements s
          JOIN users fu ON fu.id = s.from_user
          JOIN users tu ON tu.id = s.to_user

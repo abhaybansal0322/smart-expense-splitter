@@ -193,7 +193,7 @@ export async function getGroupsForUser(userId: string): Promise<GroupWithDetails
        (
          SELECT COALESCE(
            json_agg(jsonb_build_object(
-             'id', u.id, 'name', u.name, 'email', u.email, 'upi_id', u.upi_id
+             'id', u.id, 'name', u.name, 'email', u.email
            )),
            '[]'
          )
@@ -222,7 +222,7 @@ export async function getGroupById(groupId: string): Promise<GroupWithDetails | 
        (
          SELECT COALESCE(
            json_agg(jsonb_build_object(
-             'id', u.id, 'name', u.name, 'email', u.email, 'upi_id', u.upi_id
+             'id', u.id, 'name', u.name, 'email', u.email
            )),
            '[]'
          )
@@ -239,7 +239,7 @@ export async function getGroupById(groupId: string): Promise<GroupWithDetails | 
 
 export async function getGroupMembers(groupId: string): Promise<User[]> {
   const { rows } = await query<User>(
-    `SELECT u.id, u.name, u.email, u.upi_id, u.created_at
+    `SELECT u.id, u.name, u.email, u.created_at
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id
      WHERE gm.group_id = $1 AND gm.status = 'accepted'

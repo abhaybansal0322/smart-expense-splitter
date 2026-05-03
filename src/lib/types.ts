@@ -3,7 +3,6 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  upi_id?: string;
   avatar_url?: string;
   created_at: string;
 }
@@ -118,7 +117,6 @@ export interface UserBalance {
   user_id: string;
   name: string;
   email: string;
-  upi_id?: string;
   net_balance: number; // positive = owed money, negative = owes money
 }
 
@@ -127,9 +125,7 @@ export interface SettlementTransaction {
   from_name: string;
   to_user_id: string;
   to_name: string;
-  to_upi_id?: string;
   amount: number;
-  upi_link?: string;
 }
 
 export interface SettlementRecord {
@@ -139,12 +135,10 @@ export interface SettlementRecord {
   to_user: string;
   amount: number;
   status: SettlementStatus;
-  upi_reference?: string;
   created_at: string;
   confirmed_at?: string;
   from_name: string;
   to_name: string;
-  to_upi_id?: string;
 }
 
 export interface GroupWithDetails extends Group {

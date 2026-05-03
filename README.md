@@ -1,69 +1,86 @@
 # Smart Expense Splitter
 
-A production-ready web application built to solve real-world group expense problems. This system tracks group expenses, computes balances, and provides an optimized settlement plan using a greedy debt-minimization algorithm, complete with direct UPI deep links and QR codes.
+A high-performance, production-ready web application designed to simplify group expense management. Smart Expense Splitter combines precision financial logic with modern social features like photo sharing and Spotify integration, all wrapped in a premium, glassmorphic UI.
 
-## Features
+---
 
-- **Robust Expense Splitter**: Supports `Equal`, `Exact`, `Percentage`, and `Exclude` split types.
-- **Settlement Engine**: Calculates the absolute minimum number of transactions needed for the entire group to settle up.
-- **UPI Integration**: Generate UPI payment deep links (`upi://pay`) and QR codes dynamically.
-- **Real-time UX**: Clean, dark-mode, glassmorphism UI built on Next.js App Router and React.
-- **Data Integrity**: Acid-compliant, normalized PostgreSQL schema with penny-perfect arithmetic logic in the backend.
+## 🤖 Built with AI Agents
+This project is a showcase of modern **Agentic Development**. It was built through a collaborative "Pair Programming" session between a human developer and advanced AI agents:
+- **Google Gemini 3.1 Pro & Flash**: Used for high-level architecture, complex logic implementation, and real-time debugging.
+- **Codex**: Assisted in generating repetitive boilerplate and optimizing SQL queries.
+- **Code Review Graph**: Utilized to maintain a mental map of the codebase, ensuring that changes in the database schema (like removing UPI) were correctly propagated through all services and UI components.
+- **Antigravity**: The primary agentic orchestrator used to manage the workspace, run builds, and perform large-scale refactors (like the UPI excision and Dockerization).
 
-## Architecture & Tech Stack
+---
 
-- **Framework**: Next.js 15 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS 4, Vanilla CSS (Design system with custom animations)
-- **Database**: PostgreSQL 16+ via Neon (`@neondatabase/serverless` driver)
-- **Validation**: Zod (for type-safe API boundaries)
-- **Components**: Modular monolith structure using server-less API route handlers.
+## ✨ Core Features
 
-## Getting Started
+### 💰 Financial Precision
+- **Advanced Expense Splitting**: Supports `Equal`, `Exact`, `Percentage`, `Exclude`, and `Itemized (Adjustment)` strategies.
+- **Penny-Perfect Arithmetic**: Handles floating-point remainders so splits always sum exactly to the total.
+- **Optimized Settlement Engine**: A greedy algorithm that finds the absolute minimum transactions needed to settle all group debts.
 
-### 1. Database Setup (Neon)
+### 📸 Social & Fun
+- **Photo Attachments**: Upload receipts or group memories (up to 4 per expense).
+- **Spotify Integration**: Attach songs to expenses to set the group "vibe."
+- **Smart Leaderboard**: Gamified ranking based on spending and settlement reliability.
 
-1. Go to [Neon.tech](https://neon.tech/) and create a free serverless Postgres project (**PostgreSQL 16** is recommended).
-2. In the Neon Console, open the **SQL Editor**.
-3. Copy the contents of `schema.sql` from this project and run it in the Neon SQL Editor to create all tables and types.
+---
 
-### 2. Environment Variables
+## 📂 File Structure (A Beginner's Guide)
 
-Create a `.env.local` file in the root of the project (`smart-expense-splitter/.env.local`). 
+If you're new to the project, here is a map of where everything lives and what it does:
 
-**To get your Neon connection string:**
-1. On your Neon Project Dashboard, navigate to the **Connection Details** widget.
-2. Ensure you have selected your desired branch (e.g., `main`), database, and role.
-3. Check the **Pooled connection** checkbox (highly recommended for Next.js serverless API routes to prevent exhausting database connections).
-4. Click the copy icon.
+### 🌐 Frontend (The UI)
+- `src/app/`: The "Heart" of the Next.js App Router.
+  - `layout.tsx`: The global wrapper (Navbar, Fonts, SEO Metadata).
+  - `page.tsx`: The landing dashboard where you see your groups.
+  - `groups/[id]/page.tsx`: The main "Group View" showing expenses, balances, and settlements.
+- `src/components/`: Reusable building blocks.
+  - `AddExpenseModal.tsx`: The complex form for entering expenses, photos, and Spotify songs.
+  - `SettlementCard.tsx`: The UI for confirming payments between friends.
+  - `Navbar.tsx`: The top navigation bar.
 
-Paste the copied URL into your `.env.local` file. It must include `?sslmode=require` at the end:
+### ⚙️ Backend (The Logic)
+- `src/services/`: Where the "Math" happens.
+  - `expenseService.ts`: Calculates exactly how much each person owes based on the split type.
+  - `settlementService.ts`: The algorithm that minimizes the number of payments needed to clear debts.
+  - `spotifyService.ts`: Communicates with Spotify to fetch track data.
+- `src/app/api/`: Server-side endpoints (The "API").
+  - `expenses/route.ts`: Handles creating and deleting expenses in the database.
+  - `settlements/route.ts`: Manages the "Handshake" when someone confirms a payment.
+- `src/lib/`: Shared utilities.
+  - `db.ts`: The bridge between the code and the PostgreSQL database.
+  - `auth.ts`: Configuration for NextAuth (Login/Security).
 
+### 🗃️ Database & Config
+- `schema.sql`: The blueprint for the database. If you want to see how data is stored, look here.
+- `docker-compose.yml`: Instructions for Docker to package the whole app into a single "container."
+
+---
+
+## 🚀 Getting Started
+
+### 1. Database Setup
+1. Create a project at [Neon.tech](https://neon.tech/).
+2. Run the SQL in `schema.sql` using the Neon SQL Editor.
+
+### 2. Environment Configuration
+Create a `.env.local` file:
 ```env
-DATABASE_URL="postgresql://neondb_owner:password@ep-cold-shadow-123456-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+DATABASE_URL="your-neon-url-here"
+NEXTAUTH_SECRET="random-secret-string"
+SPOTIFY_CLIENT_ID="optional"
+SPOTIFY_CLIENT_SECRET="optional"
 ```
 
-### 3. Install & Run
+### 3. Local Development
+```bash
+npm install
+npm run dev
+```
 
-1. Navigate to the project directory:
-   ```bash
-   cd smart-expense-splitter
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Core Logic Modules
-
-- `src/services/expenseService.ts`: Contains the `computeSplits` function which carefully manages floating point math and remainders so that all splits perfectly sum up to the total expense amount.
-- `src/services/settlementService.ts`: Contains `minimizeTransactions`, the greedy algorithm that resolves a graph of debts into the minimal list of required transfers.
-
-## Design
-
-The UI utilizes a customized, heavily aesthetic dark-theme design system. Components make extensive use of glassmorphism (`backdrop-filter`), CSS variables for semantic theming, micro-animations, and fluid responsive grid layouts to provide a truly premium experience.
+### 4. Running with Docker
+```bash
+docker-compose up -d --build
+```

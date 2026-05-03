@@ -27,8 +27,6 @@ export function SettlementCard({
   onError,
 }: SettlementCardProps) {
   const [loading, setLoading] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-  const [reference, setReference] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(transaction.amount.toFixed(2));
   const [requestSent, setRequestSent] = useState(false);
   const canRecordPayment = currentUserId === transaction.from_user_id;
@@ -54,7 +52,6 @@ export function SettlementCard({
           from_user: transaction.from_user_id,
           to_user: transaction.to_user_id,
           amount,
-          upi_reference: reference || undefined,
         }),
       });
       const created = await createRes.json();
@@ -115,31 +112,10 @@ export function SettlementCard({
               Rs. {transaction.amount.toFixed(2)}
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>suggested</span>
-            {transaction.to_upi_id && (
-              <span className="badge badge-purple" style={{ fontSize: 10 }}>UPI</span>
-            )}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {transaction.upi_link && (
-            <a
-              href={transaction.upi_link}
-              className="btn-primary"
-              style={{ fontSize: 13, padding: '8px 14px', textDecoration: 'none' }}
-            >
-              Pay via UPI
-            </a>
-          )}
-          {transaction.to_upi_id && (
-            <button
-              className="btn-secondary"
-              onClick={() => setShowQr(!showQr)}
-              style={{ fontSize: 13, padding: '8px 14px' }}
-            >
-              QR
-            </button>
-          )}
           <button
             className="btn-success"
             onClick={handleCreateRequest}
@@ -152,7 +128,7 @@ export function SettlementCard({
         </div>
       </div>
 
-      <div style={{ padding: '0 20px 16px', display: 'grid', gridTemplateColumns: '160px 1fr', gap: 8 }}>
+      <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8 }}>
         <input
           className="form-input"
           type="number"
@@ -162,51 +138,10 @@ export function SettlementCard({
           value={paymentAmount}
           onChange={(e) => setPaymentAmount(e.target.value)}
           disabled={!canRecordPayment}
-          style={{ fontSize: 13 }}
-        />
-        <input
-          className="form-input"
-          placeholder="UPI Reference / Transaction ID (optional)"
-          value={reference}
-          onChange={(e) => setReference(e.target.value)}
-          disabled={!canRecordPayment}
-          style={{ fontSize: 13 }}
+          style={{ fontSize: 13, flex: 1 }}
         />
       </div>
 
-      {showQr && transaction.to_upi_id && (
-        <div style={{
-          padding: '16px 20px',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--bg-elevated)',
-          display: 'flex',
-          gap: 20,
-          alignItems: 'flex-start',
-        }}>
-          <QrCodeDisplay
-            upiId={transaction.to_upi_id}
-            name={transaction.to_name}
-            amount={Number(paymentAmount) || transaction.amount}
-          />
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-              Scan with any UPI app, then record the paid amount here.
-            </p>
-            <div style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: '8px 12px',
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              fontFamily: 'monospace',
-              wordBreak: 'break-all',
-            }}>
-              {transaction.upi_link}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -264,9 +199,6 @@ export function PendingSettlementCard({
           <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-warning)' }}>
             Rs. {settlement.amount.toFixed(2)}
           </span>
-          {settlement.upi_reference && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ref: {settlement.upi_reference}</span>
-          )}
           {isPayer && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Waiting for {settlement.to_name}</span>
           )}
@@ -295,19 +227,3 @@ export function PendingSettlementCard({
   );
 }
 
-function QrCodeDisplay({ upiId, name, amount }: { upiId: string; name: string; amount: number }) {
-  const upiLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(name)}&am=${amount.toFixed(2)}&cu=INR`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(upiLink)}&bgcolor=12121a&color=7c6fff&qzone=1`;
-
-  return (
-    <div style={{
-      padding: 8,
-      background: 'white',
-      borderRadius: 12,
-      flexShrink: 0,
-    }}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={qrUrl} alt="UPI QR Code" width={130} height={130} style={{ display: 'block', borderRadius: 8 }} />
-    </div>
-  );
-}

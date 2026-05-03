@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS users (
   email         VARCHAR(320) NOT NULL UNIQUE,
   password_hash VARCHAR(255),
   avatar_url    TEXT,
-  upi_id        TEXT,
   created_at    TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -100,7 +99,6 @@ CREATE TABLE IF NOT EXISTS settlements (
   to_user       UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   amount        NUMERIC(12,2) NOT NULL CHECK (amount > 0),
   status        settlement_status NOT NULL DEFAULT 'pending',
-  upi_reference VARCHAR(255),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   confirmed_at  TIMESTAMPTZ,
   CHECK (from_user <> to_user)
@@ -137,13 +135,13 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_created  ON activity_logs(created_a
 
 
 -- ─────────────── Seed Data (optional) ───────────────
--- INSERT INTO users (name, email, upi_id) VALUES
---   ('Alice',   'alice@example.com',   'alice@upi'),
---   ('Bob',     'bob@example.com',     'bob@upi'),
---   ('Charlie', 'charlie@example.com', 'charlie@upi');
+-- INSERT INTO users (name, email, ) VALUES
+--   ('Alice',   'alice@example.com'),
+--   ('Bob',     'bob@example.com'),
+--   ('Charlie', 'charlie@example.com');
 
---   ('Bob',     'bob@example.com',     'bob@upi'),
---   ('Charlie', 'charlie@example.com', 'charlie@upi');
+--   ('Bob',     'bob@example.com'),
+--   ('Charlie', 'charlie@example.com');
 
 ALTER TABLE group_members ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'accepted';
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;

@@ -9,7 +9,7 @@ import { UserBalance, SettlementTransaction } from '@/lib/types';
 export async function computeGroupBalances(groupId: string): Promise<UserBalance[]> {
   const { rows } = await query<UserBalance>(
     `WITH member_ids AS (
-       SELECT u.id, u.name, u.email, u.upi_id
+       SELECT u.id, u.name, u.email
        FROM users u
        JOIN group_members gm ON gm.user_id = u.id
        WHERE gm.group_id = $1 AND gm.status = 'accepted'
@@ -43,7 +43,6 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
        m.id AS user_id,
        m.name,
        m.email,
-       m.upi_id,
        ROUND(
          COALESCE(p.total_paid, 0)
          - COALESCE(o.total_owed, 0)
@@ -69,16 +68,15 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
  * Time complexity: O(n²) — acceptable for group sizes up to ~50 members.
  */
 export function minimizeTransactions(balances: UserBalance[]): SettlementTransaction[] {
-  // Build mutable balance list, filter out zero balances
-  const debtors: Array<{ user_id: string; name: string; upi_id?: string; amount: number }> = [];
-  const creditors: Array<{ user_id: string; name: string; upi_id?: string; amount: number }> = [];
+  const debtors: Array<{ user_id: string; name: string; amount: number }> = [];
+  const creditors: Array<{ user_id: string; name: string; amount: number }> = [];
 
   for (const b of balances) {
     const rounded = parseFloat(b.net_balance.toFixed(2));
     if (rounded < -0.005) {
-      debtors.push({ user_id: b.user_id, name: b.name, upi_id: b.upi_id, amount: Math.abs(rounded) });
+      debtors.push({ user_id: b.user_id, name: b.name, amount: Math.abs(rounded) });
     } else if (rounded > 0.005) {
-      creditors.push({ user_id: b.user_id, name: b.name, upi_id: b.upi_id, amount: rounded });
+      creditors.push({ user_id: b.user_id, name: b.name, amount: rounded });
     }
   }
 
@@ -97,11 +95,7 @@ export function minimizeTransactions(balances: UserBalance[]): SettlementTransac
       from_name: debtor.name,
       to_user_id: creditor.user_id,
       to_name: creditor.name,
-      to_upi_id: creditor.upi_id,
       amount,
-      upi_link: creditor.upi_id
-        ? buildUpiLink(creditor.upi_id, creditor.name, amount)
-        : undefined,
     });
 
     creditor.amount = parseFloat((creditor.amount - amount).toFixed(2));
@@ -114,15 +108,6 @@ export function minimizeTransactions(balances: UserBalance[]): SettlementTransac
   return transactions;
 }
 
-function buildUpiLink(upiId: string, name: string, amount: number): string {
-  const params = new URLSearchParams({
-    pa: upiId,
-    pn: name,
-    am: amount.toFixed(2),
-    cu: 'INR',
-  });
-  return `upi://pay?${params.toString()}`;
-}
 
 export async function getSettlementPlan(groupId: string): Promise<SettlementTransaction[]> {
   const balances = await computeGroupBalances(groupId);

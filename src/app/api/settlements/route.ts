@@ -10,7 +10,6 @@ import crypto from 'crypto';
 const ConfirmSchema = z.object({
   settlement_id: z.string().uuid(),
   action: z.enum(['confirm', 'reject']).default('confirm'),
-  upi_reference: z.string().optional(),
 });
 
 const CreateSettlementSchema = z.object({
@@ -18,7 +17,6 @@ const CreateSettlementSchema = z.object({
   from_user: z.string().uuid(),
   to_user: z.string().uuid(),
   amount: z.number().positive(),
-  upi_reference: z.string().optional(),
 });
 
 // POST: Create or confirm a settlement
@@ -57,9 +55,9 @@ export async function POST(req: NextRequest) {
         if (parsed.data.action === 'confirm') {
           await client.query(
             `UPDATE settlements
-             SET status = 'confirmed', confirmed_at = NOW(), upi_reference = COALESCE($1, upi_reference)
-             WHERE id = $2`,
-            [parsed.data.upi_reference ?? null, parsed.data.settlement_id]
+             SET status = 'confirmed', confirmed_at = NOW()
+             WHERE id = $1`,
+            [parsed.data.settlement_id]
           );
         } else {
           await client.query(
@@ -113,10 +111,10 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await query<{ id: string }>(
-      `INSERT INTO settlements (group_id, from_user, to_user, amount, status, upi_reference)
-       VALUES ($1, $2, $3, $4, 'pending', $5)
+      `INSERT INTO settlements (group_id, from_user, to_user, amount, status)
+       VALUES ($1, $2, $3, $4, 'pending')
        RETURNING id`,
-      [group_id, from_user, to_user, amount, parsed.data.upi_reference ?? null]
+      [group_id, from_user, to_user, amount]
     );
 
     const settlementId = result.rows[0].id;
