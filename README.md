@@ -10,86 +10,162 @@ A sophisticated, production-grade expense management platform engineered for pre
 
 ## 🤖 Built with AI Agents
 
-This project is a showcase of modern **Agentic Development**. It was built through a collaborative "Pair Programming" session between a human developer and advanced AI agents:
-- **Google Gemini 3.1 Pro & Flash**: Used for high-level architecture, complex logic implementation, and real-time debugging.
-- **Codex**: Assisted in generating repetitive boilerplate and optimizing SQL queries.
-- **Code Review Graph**: Utilized to maintain a mental map of the codebase, ensuring that changes in the database schema (like removing UPI) were correctly propagated through all services and UI components.
-- **Antigravity**: The primary agentic orchestrator used to manage the workspace, run builds, and perform large-scale refactors (like the UPI excision and Dockerization).
+This project is a flagship example of **Agentic Development**. It was constructed through a deep collaboration between a human architect and a swarm of specialized AI agents:
+- **Google Gemini 3.1 Pro & Flash**: Orchestrated high-level architecture and complex financial logic.
+- **Antigravity**: Managed the workspace, handled large-scale refactors (like the UPI excision), and optimized the Docker environment.
+- **Code Review Graph**: Maintained a structural map of the project, ensuring consistency across the database, services, and UI.
 
 ---
 
-## 🏗️ Architecture & Design Philosophy
+## 🏛️ High-Level Architecture (HLD)
 
-This project transcends a simple "Splitwise clone" by implementing industry-standard architectural patterns usually reserved for large-scale enterprise systems.
+The project follows a **Clean Architecture** approach, ensuring separation of concerns and high testability.
 
-### 1. The Repository Pattern
-We decouple business logic from data access using a **Repository Pattern** (`src/db/repositories/`).
-*   **Why?** It ensures that the core services (`src/services/`) remain agnostic of the underlying database driver. This makes the system highly testable with mocks and allows for switching database providers (e.g., from Postgres to PlanetScale) with zero impact on business logic.
+```mermaid
+graph TD
+    subgraph "Frontend (Next.js 16)"
+        UI[React Components / Pages]
+        State[React Hooks / NextAuth]
+    end
 
-### 2. Service Layer Pattern
-All financial calculations and complex state transitions live in a dedicated **Service Layer**.
-*   **Why?** By keeping API routes thin and moving logic to services, we ensure that the same logic can be reused across Web, CLI, or Background Jobs without duplication.
+    subgraph "Application Layer (API Routes)"
+        Routes[API Endpoints]
+        Validators[Zod Schemas]
+    end
 
-### 3. Financial Precision Engine
-Floating-point math is the enemy of financial apps. Our system uses a precision-first approach for splitting:
-*   **Strategy Pattern**: Supports `Equal`, `Exact`, `Percentage`, `Exclude`, and `Adjustment` strategies.
-*   **The Remainder Algorithm**: When ₹100 is split among 3 people, our engine ensures the total always sums to ₹100.00 by intelligently handling the 1-paise remainder.
+    subgraph "Core Business Logic (Services)"
+        ExpService[Expense Service]
+        SettService[Settlement Service]
+        ScoreService[Leaderboard Service]
+        Events[Event Bus]
+    end
 
-### 4. Min-Transaction Settlement Algorithm
-Built on a **Greedy Flow-based Algorithm**, the settlement engine reduces "clutter" by finding the absolute minimum number of transactions needed to zero out all balances within a group.
+    subgraph "Data Access (Persistence)"
+        Repos[Repositories]
+        Drizzle[Drizzle ORM]
+        DB[(Neon PostgreSQL)]
+    end
 
----
+    subgraph "Integrations"
+        Spotify[Spotify Web API]
+    end
 
-## 🚀 3-Minute Quick Start
-
-Get the production environment running locally in three easy steps.
-
-### 1. Prerequisite: Database
-1. Spin up a free PostgreSQL instance on [Neon.tech](https://neon.tech/).
-2. Grab your connection string.
-
-### 2. Configure Environment
-```bash
-cp .env.example .env.local
-# Paste your Neon DATABASE_URL into .env.local
+    UI --> Routes
+    Routes --> Validators
+    Routes --> ExpService
+    Routes --> SettService
+    ExpService --> Repos
+    SettService --> Repos
+    Repos --> Drizzle
+    Drizzle --> DB
+    ExpService -.-> Events
+    Events -.-> ActivityLog[Activity Logs]
+    ExpService --> Spotify
 ```
 
-### 3. Install & Launch
-```bash
-npm install
-npm run dev
-```
-*Access the app at [localhost:3000](http://localhost:3000)*
+---
+
+## 💎 Features & Benefits
+
+### 1. Financial Precision Engine
+- **The Problem**: Standard splitters often lose 1-2 paise due to floating-point division (e.g., ₹100 / 3).
+- **The Solution**: Our **Remainder Algorithm** ensures that the sum of splits *always* matches the total amount by intelligently assigning the fractional remainder.
+- **Benefit**: Accountants and precision-obsessed users can trust the math 100%.
+
+### 2. Multi-Strategy Splitting
+- **Options**: `Equal`, `Exact`, `Percentage`, `Exclude`, and `Adjustment`.
+- **Benefit**: Handles everything from simple dinners to complex rent splits where one person has a larger room.
+
+### 3. Min-Transaction Settlement Algorithm
+- **The Problem**: In a group of 5, you might have 10 messy debts.
+- **The Solution**: Uses a **Greedy Flow-based Algorithm** to simplify the debt web into the minimum number of payments.
+- **Benefit**: Reduces social friction by minimizing the number of transactions needed to settle up.
+
+### 4. Social Integration (Spotify)
+- **Feature**: Attach a Spotify track to any expense.
+- **Benefit**: Turns a boring "Grocery bill" into a shared memory. "Remember that road trip where we played this song on loop?"
+
+### 5. Leaderboard & Gamification
+- **Metric**: Ranks members based on spending and promptness in settling.
+- **Benefit**: Encourages positive financial behavior within the group.
 
 ---
 
-## 🛠️ Tech Stack
+## 🔄 Core Workflow
 
-| Layer | Technology | Rationale |
-| :--- | :--- | :--- |
-| **Framework** | **Next.js 16** | Leverages React Server Components (RSC) for zero-JS headers and faster LCP. |
-| **ORM** | **Drizzle ORM** | Type-safe, SQL-like syntax with nearly zero runtime overhead. |
-| **Database** | **PostgreSQL (Neon)** | Scalable, serverless Postgres with instant branching for dev environments. |
-| **Auth** | **NextAuth.js** | Secure, flexible authentication supporting both OAuth and Credentials. |
-| **Styling** | **Vanilla CSS** | Maximum performance with zero-runtime CSS; custom Glassmorphic design system. |
-| **Validation**| **Zod** | Schema-first validation for both API payloads and environment variables. |
+### 1. Group Formation
+- **User A** creates a "Europe Trip" group.
+- System generates a unique `joinCode`.
+- **User B** & **User C** enter the code to join instantly.
+
+### 2. Expense Lifecycle
+- **Add Expense**: Enter amount, description, and category.
+- **Split Strategy**: Choose how to divide (e.g., User B pays 60%, User C pays 40%).
+- **Attachments**: Snap a photo of the receipt for proof.
+- **Spotify**: Add the "Theme Song" of the night.
+
+### 3. Debt Reconciliation
+- View the **Settlement Plan** generated by the engine.
+- **Payer** records a settlement in the app.
+- **Receiver** gets a notification and must **Confirm** the receipt of funds.
+- Balances are updated in real-time.
 
 ---
 
-## 📂 Project Structure
+## 🗄️ Database Schema (LLD)
 
-```text
-src/
-├── app/              # Next.js App Router (Pages & API Routes)
-├── components/       # Presentation-layer React components
-├── db/               # Drizzle Schema & Repository Layer
-│   ├── repositories/ # Abstracted Data Access Objects
-│   └── schema.ts     # Single source of truth for the DB schema
-├── features/         # Domain-specific UI logic (Dashboard, Expenses, etc.)
-├── lib/              # Shared utilities (Formatting, API Handlers)
-├── services/         # The "Brain" - Financial logic & Business rules
-└── styles/           # Global design system & theme tokens
+```mermaid
+erDiagram
+    USERS ||--o{ GROUP_MEMBERS : belongs_to
+    GROUPS ||--o{ GROUP_MEMBERS : contains
+    GROUPS ||--o{ EXPENSES : records
+    USERS ||--o{ EXPENSES : pays
+    EXPENSES ||--o{ EXPENSE_SPLITS : divided_into
+    USERS ||--o{ EXPENSE_SPLITS : owes
+    EXPENSES ||--o| SPOTIFY_TRACKS : has
+    EXPENSES ||--o{ ATTACHMENTS : has
+    USERS ||--o{ SETTLEMENTS : sends
+    USERS ||--o{ SETTLEMENTS : receives
+    GROUPS ||--o{ ACTIVITY_LOGS : audits
 ```
+
+---
+
+## 🛠️ Tech Stack Rationale
+
+| Layer | Technology | Rationale | Benefit |
+| :--- | :--- | :--- | :--- |
+| **Framework** | **Next.js 16** | Server-first architecture (RSC). | Minimal client-side JS, ultra-fast LCP. |
+| **ORM** | **Drizzle ORM** | SQL-first, zero-runtime overhead. | Type safety without sacrificing performance. |
+| **Database** | **PostgreSQL (Neon)** | Serverless Postgres with branching. | Instant dev environments and zero cost at rest. |
+| **Auth** | **NextAuth.js** | Industry-standard session management. | Secure OAuth and encrypted credentials. |
+| **Testing** | **tsx + pg-mem** | In-memory Postgres for tests. | Sub-second test execution without DB latency. |
+| **Deployment**| **Docker** | Containerized environment. | "Works on my machine" guaranteed across teams. |
+
+---
+
+## 🚀 Development Workflow
+
+### Local Setup
+1. **Clone & Install**:
+   ```bash
+   git clone <repo-url>
+   npm install
+   ```
+2. **Environment**:
+   Set up `.env.local` with your Neon `DATABASE_URL` and NextAuth secrets.
+3. **Database Migration**:
+   ```bash
+   npx drizzle-kit push
+   ```
+4. **Run Tests**:
+   ```bash
+   npm test
+   ```
+5. **Start**:
+   ```bash
+   npm run dev
+   ```
 
 ---
 

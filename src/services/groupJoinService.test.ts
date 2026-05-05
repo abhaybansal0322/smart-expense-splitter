@@ -16,10 +16,45 @@ function sqlValue(value: unknown): string {
 
 function bindParams(text: string, params?: unknown[]): string {
   if (!params) return text;
-  return params.reduce(
-    (sql, param, index) => sql.replaceAll(`$${index + 1}`, sqlValue(param)),
-    text
-  );
+  let sql = text;
+  for (let i = 0; i < params.length; i++) {
+    sql = sql.replaceAll(`$${i + 1}`, sqlValue(params[i]));
+  }
+  return sql;
+}
+
+function extractDrizzleParams(where: any): any[] {
+  if (!where) return [];
+  const params: any[] = [];
+  const visited = new Set();
+
+  function walk(obj: any) {
+    if (!obj || typeof obj !== 'object' || visited.has(obj)) return;
+    visited.add(obj);
+
+    if (obj.constructor?.name === 'Param' && 'value' in obj) {
+      params.push(obj.value);
+      return;
+    }
+
+    const chunks = obj.query || obj.queryChunks || obj.terms;
+    if (Array.isArray(chunks)) {
+      for (const chunk of chunks) {
+        walk(chunk);
+      }
+    } else if (obj.left || obj.right) {
+      walk(obj.left);
+      walk(obj.right);
+    }
+  }
+
+  walk(where);
+  return params;
+}
+
+function extractDrizzleParam(where: any): any {
+  const params = extractDrizzleParams(where);
+  return params.length > 0 ? params[0] : null;
 }
 
 function createClient() {
@@ -59,7 +94,8 @@ function createClient() {
       groups: {
         findFirst: async ({ where }: any) => {
           // Simplified mock: find by joinCode
-          const sql = bindParams('SELECT id FROM groups WHERE join_code = $1', [where.value]);
+          const val = extractDrizzleParam(where);
+          const sql = bindParams('SELECT id FROM groups WHERE join_code = $1', [val]);
           const result = db.public.query(sql);
           return result.rows[0] ?? null;
         }
@@ -67,7 +103,8 @@ function createClient() {
       groupMembers: {
         findFirst: async ({ where }: any) => {
           // Simplified mock: find by groupId and userId
-          const sql = bindParams('SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2', [where.left.value, where.right.value]);
+          const params = extractDrizzleParams(where);
+          const sql = bindParams('SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2', params);
           const result = db.public.query(sql);
           return result.rows[0] ?? null;
         }
