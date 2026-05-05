@@ -8,6 +8,16 @@ A sophisticated, production-grade expense management platform engineered for pre
 
 ---
 
+## 🤖 Built with AI Agents
+
+This project is a showcase of modern **Agentic Development**. It was built through a collaborative "Pair Programming" session between a human developer and advanced AI agents:
+- **Google Gemini 3.1 Pro & Flash**: Used for high-level architecture, complex logic implementation, and real-time debugging.
+- **Codex**: Assisted in generating repetitive boilerplate and optimizing SQL queries.
+- **Code Review Graph**: Utilized to maintain a mental map of the codebase, ensuring that changes in the database schema (like removing UPI) were correctly propagated through all services and UI components.
+- **Antigravity**: The primary agentic orchestrator used to manage the workspace, run builds, and perform large-scale refactors (like the UPI excision and Dockerization).
+
+---
+
 ## 🏗️ Architecture & Design Philosophy
 
 This project transcends a simple "Splitwise clone" by implementing industry-standard architectural patterns usually reserved for large-scale enterprise systems.
@@ -80,11 +90,6 @@ src/
 ├── services/         # The "Brain" - Financial logic & Business rules
 └── styles/           # Global design system & theme tokens
 ```
-
----
-
-## 🤖 Agentic Development Note
-This codebase is optimized for **Agentic AI interaction**. It follows strict semantic naming and modular patterns that allow coding assistants to perform safe, automated refactors without breaking core financial logic.
 
 ---
 
