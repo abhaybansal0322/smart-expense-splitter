@@ -1,6 +1,6 @@
 import { db } from '@/db/client';
-import { expenses, expenseSplits, expenseSpotifyTracks, groupMembers } from '@/db/schema';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { expenses as expensesTable, expenseSplits, expenseSpotifyTracks, groupMembers } from '@/db/schema';
+import { eq, and, isNull, inArray, desc } from 'drizzle-orm';
 import { eventBus, DomainEvent } from '@/lib/events';
 import {
   CreateExpensePayload,
@@ -43,7 +43,7 @@ export async function createExpense(payload: CreateExpensePayload, userId?: stri
       ...Object.keys(shares),
     ]);
 
-    const [newExpense] = await tx.insert(expenses).values({
+    const [newExpense] = await tx.insert(expensesTable).values({
       groupId: payload.group_id,
       paidBy: payload.paid_by,
       amount: payload.amount.toString(),
@@ -89,7 +89,7 @@ export async function createExpense(payload: CreateExpensePayload, userId?: stri
 
 export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDetails[]> {
   const exps = await db.query.expenses.findMany({
-    where: and(eq(expenses.groupId, groupId), isNull(expenses.deletedAt)),
+    where: and(eq(expensesTable.groupId, groupId), isNull(expensesTable.deletedAt)),
     with: {
       payer: true,
       splits: {
@@ -100,7 +100,7 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
       attachments: true,
       spotifyTrack: true
     },
-    orderBy: (expenses, { desc }) => [desc(expenses.createdAt)]
+    orderBy: [desc(expensesTable.createdAt)]
   });
 
   return exps.map(e => ({
@@ -109,6 +109,7 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
     paid_by: e.paidBy,
     amount: Number(e.amount),
     description: e.description,
+    category: e.category ?? undefined,
     split_type: e.splitType,
     created_at: e.createdAt.toISOString(),
     paid_by_name: e.payer.name,
@@ -136,24 +137,25 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
       spotify_url: e.spotifyTrack.spotifyUrl,
       name: e.spotifyTrack.name,
       artist: e.spotifyTrack.artist,
-      album_name: e.spotifyTrack.albumName,
-      album_image_url: e.spotifyTrack.albumImageUrl,
+      album_name: e.spotifyTrack.albumName ?? undefined,
+      album_image_url: e.spotifyTrack.albumImageUrl ?? undefined,
       created_at: e.spotifyTrack.createdAt.toISOString()
-    } : null
+    } : undefined
   }));
 }
 
 export async function deleteExpense(expenseId: string, groupId: string, userId?: string): Promise<void> {
   await db.transaction(async (tx) => {
-    const existing = await tx.query.expenses.findFirst({
-      where: and(eq(expenses.id, expenseId), eq(expenses.groupId, groupId), isNull(expenses.deletedAt))
-    });
+    const gId = groupId;
+    const [existing] = await tx.select().from(expensesTable).where(
+      and(eq(expensesTable.id, expenseId), eq(expensesTable.groupId, gId as any), isNull(expensesTable.deletedAt))
+    ).limit(1);
 
     if (!existing) throw new Error('Expense not found');
 
-    await tx.update(expenses)
+    await tx.update(expensesTable)
       .set({ deletedAt: new Date() })
-      .where(eq(expenses.id, expenseId));
+      .where(eq(expensesTable.id, expenseId));
 
     if (userId) {
       eventBus.emit(DomainEvent.EXPENSE_DELETED, {
@@ -170,9 +172,11 @@ export async function deleteExpense(expenseId: string, groupId: string, userId?:
 
 export async function updateExpense(payload: UpdateExpensePayload, userId?: string): Promise<void> {
   return db.transaction(async (tx) => {
-    const existing = await tx.query.expenses.findFirst({
-      where: and(eq(expenses.id, payload.expense_id), eq(expenses.groupId, payload.group_id), isNull(expenses.deletedAt))
-    });
+    const eId = payload.expense_id;
+    const gId = payload.group_id;
+    const [existing] = await tx.select().from(expensesTable).where(
+      and(eq(expensesTable.id, eId), eq(expensesTable.groupId, gId as any), isNull(expensesTable.deletedAt))
+    ).limit(1);
 
     if (!existing) throw new Error('Expense not found');
 
@@ -181,12 +185,12 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
     const updatedCat = payload.category !== undefined ? payload.category : existing.category;
     const updatedSplitType = payload.split_type ?? existing.splitType;
 
-    await tx.update(expenses).set({
+    await tx.update(expensesTable).set({
       amount: updatedAmount.toString(),
       description: updatedDesc,
       category: updatedCat,
       splitType: updatedSplitType
-    }).where(eq(expenses.id, payload.expense_id));
+    }).where(eq(expensesTable.id, payload.expense_id));
 
     if (payload.participants || payload.split_type || payload.amount || payload.exact_amounts || payload.percentages || payload.excluded_users || payload.adjustments) {
       const fullPayload = {

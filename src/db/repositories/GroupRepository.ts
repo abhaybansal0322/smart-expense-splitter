@@ -94,7 +94,8 @@ export class GroupRepository {
         group: {
           with: {
             members: {
-              where: (members, { eq }) => eq(members.status, 'accepted')
+              where: (members, { eq }) => eq(members.status, 'accepted'),
+              with: { user: true }
             }
           }
         }

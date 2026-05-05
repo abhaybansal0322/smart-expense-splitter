@@ -4,7 +4,7 @@ import { UserRepository } from '@/db/repositories/UserRepository';
 import { db } from '@/db/client';
 import { groups, groupMembers } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { createUniqueJoinCode, joinGroupByCodeWithClient } from './groupJoinService';
+import { createUniqueJoinCode, joinGroupByCodeWithClient, JoinedGroup } from './groupJoinService';
 import { eventBus, DomainEvent } from '@/lib/events';
 
 export interface CreatedGroup {
@@ -138,7 +138,8 @@ export async function getGroupsForUser(userId: string): Promise<GroupWithDetails
     members: g.members.map(m => ({
       id: m.user.id,
       name: m.user.name,
-      email: m.user.email
+      email: m.user.email,
+      created_at: m.user.createdAt.toISOString()
     }))
   }));
 }
@@ -158,7 +159,8 @@ export async function getGroupById(groupId: string): Promise<GroupWithDetails | 
     members: g.members.map(m => ({
       id: m.user.id,
       name: m.user.name,
-      email: m.user.email
+      email: m.user.email,
+      created_at: m.user.createdAt.toISOString()
     }))
   };
 }

@@ -1,15 +1,15 @@
 import { db } from '@/db/client';
-import { settlements, groupMembers, users, expenses, expenseSplits } from '@/db/schema';
-import { eq, and, or, sql, isNull } from 'drizzle-orm';
+import { settlements } from '@/db/schema';
+import { sql, desc } from 'drizzle-orm';
 import { UserBalance, SettlementTransaction } from '@/lib/types';
 import { minimizeTransactions } from '@/domain/balanceCalculator';
 import { eventBus, DomainEvent } from '@/lib/events';
-import { isUserInGroup } from './groupService';
+import { GroupRepository } from '@/db/repositories/GroupRepository';
+import { SettlementRepository } from '@/db/repositories/SettlementRepository';
 
 export { minimizeTransactions } from '@/domain/balanceCalculator';
 
 export async function computeGroupBalances(groupId: string): Promise<UserBalance[]> {
-  // Using a raw SQL template for the complex balance CTE, but executing via Drizzle
   const result = await db.execute(sql`
     WITH member_ids AS (
        SELECT u.id, u.name, u.email
@@ -81,34 +81,27 @@ export async function createSettlement(
   }
 
   const [payerIsMember, receiverIsMember] = await Promise.all([
-    isUserInGroup(groupId, fromUser),
-    isUserInGroup(groupId, toUser),
+    GroupRepository.isUserInGroup(groupId, fromUser),
+    GroupRepository.isUserInGroup(groupId, toUser),
   ]);
 
   if (!payerIsMember || !receiverIsMember) {
     throw new Error('Both users must be accepted members of this group');
   }
 
-  const pendingDuplicate = await db.query.settlements.findFirst({
-    where: and(
-      eq(settlements.groupId, groupId),
-      eq(settlements.fromUser, fromUser),
-      eq(settlements.toUser, toUser),
-      eq(settlements.status, 'pending')
-    )
-  });
+  const pendingDuplicate = await SettlementRepository.findPending(groupId, fromUser, toUser);
 
   if (pendingDuplicate) {
     throw new Error('A payment request is already waiting for this receiver');
   }
 
-  const [newSettlement] = await db.insert(settlements).values({
+  const newSettlement = await SettlementRepository.create({
     groupId,
     fromUser,
     toUser,
     amount: amount.toString(),
     status: 'pending'
-  }).returning();
+  });
 
   eventBus.emit(DomainEvent.SETTLEMENT_CREATED, {
     userId: fromUser,
@@ -129,7 +122,7 @@ export async function respondToSettlement(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const check = await tx.query.settlements.findFirst({
-      where: eq(settlements.id, settlementId)
+      where: (table, { eq }) => eq(table.id, settlementId)
     });
 
     if (!check) throw new Error('Settlement not found');
@@ -141,7 +134,7 @@ export async function respondToSettlement(
     if (action === 'confirm') {
       await tx.update(settlements)
         .set({ status: 'confirmed', confirmedAt: new Date() })
-        .where(eq(settlements.id, settlementId));
+        .where((table, { eq }) => eq(table.id, settlementId));
 
       eventBus.emit(DomainEvent.SETTLEMENT_CONFIRMED, {
         userId: userId,
@@ -155,21 +148,13 @@ export async function respondToSettlement(
     } else {
       await tx.update(settlements)
         .set({ status: 'cancelled' })
-        .where(eq(settlements.id, settlementId));
+        .where((table, { eq }) => eq(table.id, settlementId));
     }
   });
 }
 
 export async function getSettlementsForUser(userId: string) {
-  const result = await db.query.settlements.findMany({
-    where: or(eq(settlements.fromUser, userId), eq(settlements.toUser, userId)),
-    with: {
-      sender: true,
-      receiver: true,
-      group: true
-    },
-    orderBy: (settlements, { desc }) => [desc(settlements.createdAt)]
-  });
+  const result = await SettlementRepository.findForUser(userId);
 
   return result.map(s => ({
     id: s.id,
