@@ -1,6 +1,7 @@
 import { db } from '@/db/client';
 import { groups, groupMembers } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { eventBus, DomainEvent } from '@/lib/events';
 
 export interface JoinedGroup {
   groupId: string;
@@ -87,6 +88,12 @@ export async function joinGroupByCodeWithClient(
   }).onConflictDoUpdate({
     target: [groupMembers.userId, groupMembers.groupId],
     set: { status: 'accepted' }
+  });
+
+  eventBus.emit(DomainEvent.MEMBER_JOINED, {
+    userId,
+    groupId: group.id,
+    tx
   });
 
   return { groupId: group.id };

@@ -5,6 +5,7 @@ import { db } from '@/db/client';
 import { groups, groupMembers } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createUniqueJoinCode, joinGroupByCodeWithClient } from './groupJoinService';
+import { eventBus, DomainEvent } from '@/lib/events';
 
 export interface CreatedGroup {
   groupId: string;
@@ -62,6 +63,13 @@ export async function createGroup(
       }
     }
 
+    eventBus.emit(DomainEvent.GROUP_CREATED, {
+      userId: creatorUserId,
+      groupId: newGroup.id,
+      name: newGroup.name,
+      tx
+    });
+
     return { groupId: newGroup.id, joinCode };
   });
 }
@@ -107,6 +115,10 @@ export async function respondToGroupInvitation(
 ): Promise<void> {
   if (action === 'accept') {
     await GroupRepository.updateMemberStatus(groupId, userId, 'accepted');
+    eventBus.emit(DomainEvent.MEMBER_JOINED, {
+      userId,
+      groupId
+    });
   } else {
     await GroupRepository.removeMember(groupId, userId);
   }

@@ -3,7 +3,7 @@ import { settlements, groupMembers, users, expenses, expenseSplits } from '@/db/
 import { eq, and, or, sql, isNull } from 'drizzle-orm';
 import { UserBalance, SettlementTransaction } from '@/lib/types';
 import { minimizeTransactions } from '@/domain/balanceCalculator';
-import { logActivity } from './activityService';
+import { eventBus, DomainEvent } from '@/lib/events';
 import { isUserInGroup } from './groupService';
 
 export { minimizeTransactions } from '@/domain/balanceCalculator';
@@ -110,13 +110,13 @@ export async function createSettlement(
     status: 'pending'
   }).returning();
 
-  await logActivity({
+  eventBus.emit(DomainEvent.SETTLEMENT_CREATED, {
     userId: fromUser,
     groupId: groupId,
-    action: 'SETTLEMENT_CREATED',
-    entityType: 'settlement',
-    entityId: newSettlement.id,
-    metadata: { amount, fromUser, toUser }
+    settlementId: newSettlement.id,
+    amount,
+    fromUser,
+    toUser
   });
 
   return newSettlement.id;
@@ -142,6 +142,16 @@ export async function respondToSettlement(
       await tx.update(settlements)
         .set({ status: 'confirmed', confirmedAt: new Date() })
         .where(eq(settlements.id, settlementId));
+
+      eventBus.emit(DomainEvent.SETTLEMENT_CONFIRMED, {
+        userId: userId,
+        groupId: check.groupId,
+        settlementId: check.id,
+        amount: Number(check.amount),
+        fromUser: check.fromUser,
+        toUser: check.toUser,
+        tx
+      });
     } else {
       await tx.update(settlements)
         .set({ status: 'cancelled' })

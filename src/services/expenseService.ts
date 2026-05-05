@@ -1,7 +1,7 @@
 import { db } from '@/db/client';
 import { expenses, expenseSplits, expenseSpotifyTracks, groupMembers } from '@/db/schema';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
-import { logActivity } from '@/services/activityService';
+import { eventBus, DomainEvent } from '@/lib/events';
 import {
   CreateExpensePayload,
   ExpenseWithDetails,
@@ -73,17 +73,14 @@ export async function createExpense(payload: CreateExpensePayload, userId?: stri
     }
 
     if (userId) {
-      await logActivity({
+      eventBus.emit(DomainEvent.EXPENSE_CREATED, {
         userId,
         groupId: payload.group_id,
-        action: 'EXPENSE_CREATED',
-        entityType: 'expense',
-        entityId: newExpense.id,
-        metadata: {
-          amount: payload.amount,
-          description: payload.description
-        }
-      }, tx);
+        expenseId: newExpense.id,
+        amount: payload.amount,
+        description: payload.description,
+        tx
+      });
     }
 
     return newExpense.id;
@@ -159,14 +156,14 @@ export async function deleteExpense(expenseId: string, groupId: string, userId?:
       .where(eq(expenses.id, expenseId));
 
     if (userId) {
-      await logActivity({
+      eventBus.emit(DomainEvent.EXPENSE_DELETED, {
         userId,
         groupId,
-        action: 'EXPENSE_DELETED',
-        entityType: 'expense',
-        entityId: expenseId,
-        metadata: { amount: Number(existing.amount), description: existing.description }
-      }, tx);
+        expenseId,
+        amount: Number(existing.amount),
+        description: existing.description,
+        tx
+      });
     }
   });
 }
@@ -248,17 +245,14 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
     }
 
     if (userId) {
-      await logActivity({
+      eventBus.emit(DomainEvent.EXPENSE_UPDATED, {
         userId,
         groupId: existing.groupId,
-        action: 'EXPENSE_UPDATED',
-        entityType: 'expense',
-        entityId: payload.expense_id,
-        metadata: {
-          old_amount: Number(existing.amount),
-          new_amount: updatedAmount
-        }
-      }, tx);
+        expenseId: payload.expense_id,
+        oldAmount: Number(existing.amount),
+        newAmount: updatedAmount,
+        tx
+      });
     }
   });
 }
