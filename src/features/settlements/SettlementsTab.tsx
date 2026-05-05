@@ -2,6 +2,7 @@
 
 import { PendingSettlementCard, SettlementCard } from '@/components/SettlementCard';
 import { SettlementRecord, SettlementTransaction } from '@/lib/types';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 export function SettlementsTab({
   settlements,
@@ -94,7 +95,7 @@ export function SettlementsTab({
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 800 }}>Rs. {record.amount.toFixed(2)}</div>
+                  <div style={{ fontWeight: 800 }}>{formatIndianNumberCompact(record.amount)}</div>
                   <span className={record.status === 'confirmed' ? 'badge badge-green' : 'badge badge-red'}>
                     {record.status === 'confirmed' ? 'Confirmed' : 'Rejected'}
                   </span>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { SettlementRecord, SettlementTransaction } from '@/lib/types';
 import { Avatar } from './Avatar';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 interface SettlementCardProps {
   transaction: SettlementTransaction;
@@ -109,7 +110,7 @@ export function SettlementCard({
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}>
-              Rs. {transaction.amount.toFixed(2)}
+              {formatIndianNumberCompact(transaction.amount)}
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>suggested</span>
           </div>
@@ -197,7 +198,7 @@ export function PendingSettlementCard({
         </div>
         <div style={{ marginTop: 4, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-warning)' }}>
-            Rs. {settlement.amount.toFixed(2)}
+            {formatIndianNumberCompact(settlement.amount)}
           </span>
           {isPayer && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Waiting for {settlement.to_name}</span>

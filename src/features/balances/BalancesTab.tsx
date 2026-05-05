@@ -2,6 +2,7 @@
 
 import { Avatar } from '@/components/Avatar';
 import { UserBalance } from '@/lib/types';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 export function BalancesTab({ balances }: { balances: UserBalance[] }) {
   if (balances.length === 0) {
@@ -29,7 +30,7 @@ export function BalancesTab({ balances }: { balances: UserBalance[] }) {
                   fontSize: 20, fontWeight: 800,
                   color: isPositive ? 'var(--accent-success)' : 'var(--accent-danger)',
                 }}>
-                  {isPositive ? '+' : ''}₹{Math.abs(b.net_balance).toFixed(2)}
+                  {isPositive ? '+' : '-'} {formatIndianNumberCompact(Math.abs(b.net_balance))}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {isPositive ? 'is owed' : 'owes'}

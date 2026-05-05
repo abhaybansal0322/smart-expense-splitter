@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Avatar } from '@/components/Avatar';
 import { AddExpenseModal } from '@/components/AddExpenseModal';
 import { ExpenseWithDetails, User } from '@/lib/types';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 const SPLIT_TYPE_LABELS: Record<string, string> = {
   equal: 'Equal',
@@ -104,7 +105,7 @@ function ExpenseRow({ expense, onRefresh, showToast, onEdit }: {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{expense.description}</span>
             <span style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', flexShrink: 0, marginLeft: 12 }}>
-              ₹{Number(expense.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {formatIndianNumberCompact(Number(expense.amount))}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
@@ -176,7 +177,7 @@ function ExpenseRow({ expense, onRefresh, showToast, onEdit }: {
                     <Avatar name={split.user_name} size={28} />
                     <span style={{ fontSize: 14 }}>{split.user_name}</span>
                   </div>
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>₹{Number(split.share).toFixed(2)}</span>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{formatIndianNumberCompact(Number(split.share))}</span>
                 </div>
               ))}
             </div>

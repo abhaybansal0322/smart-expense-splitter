@@ -1,6 +1,6 @@
 'use client';
 
-import { formatIndianCurrency } from '@/lib/formatCurrency';
+import { formatIndianCurrency, formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 interface StatsBarProps {
   groupsCount: number;
@@ -11,7 +11,7 @@ interface StatsBarProps {
 export function StatsBar({ groupsCount, totalExpenses, totalPending }: StatsBarProps) {
   const stats = [
     { label: 'Total Groups', value: groupsCount, icon: '◈', color: 'var(--accent-primary)' },
-    { label: 'Total Expenses', value: formatIndianCurrency(totalExpenses), icon: '₹', color: 'var(--accent-secondary)' },
+    { label: 'Total Expenses', value: formatIndianNumberCompact(totalExpenses), icon: '₹', color: 'var(--accent-secondary)' },
     { label: 'Pending Settlements', value: totalPending, icon: '⏳', color: totalPending > 0 ? 'var(--accent-warning)' : 'var(--accent-success)' },
   ];
 

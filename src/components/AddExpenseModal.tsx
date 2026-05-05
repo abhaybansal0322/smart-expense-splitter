@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { User, SplitType, ExpenseWithDetails, ExpenseSpotifyTrack } from '@/lib/types';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 interface AddExpenseModalProps {
   groupId: string;
@@ -347,8 +348,8 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
             {/* Validation totals */}
             {splitType === 'exact' && totalAmt > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: Math.abs(exactTotal - totalAmt) < 0.01 ? 'var(--accent-success)' : 'var(--accent-warning)' }}>
-                Total assigned: ₹{exactTotal.toFixed(2)} / ₹{totalAmt.toFixed(2)}
-                {Math.abs(exactTotal - totalAmt) >= 0.01 && ` (diff: ₹${Math.abs(exactTotal - totalAmt).toFixed(2)})`}
+                Total assigned: {formatIndianNumberCompact(exactTotal)} / {formatIndianNumberCompact(totalAmt)}
+                {Math.abs(exactTotal - totalAmt) >= 0.01 && ` (diff: ${formatIndianNumberCompact(Math.abs(exactTotal - totalAmt))})`}
               </div>
             )}
             {splitType === 'percentage' && (
@@ -358,7 +359,7 @@ export function AddExpenseModal({ groupId, members, onClose, onCreated, initialE
             )}
             {splitType === 'adjustment' && totalAmt > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: remainingForEqual >= 0 ? 'var(--text-secondary)' : 'var(--accent-danger)' }}>
-                Total extra: ₹{adjTotal.toFixed(2)} | Remaining to split equally: ₹{remainingForEqual.toFixed(2)}
+                Total extra: {formatIndianNumberCompact(adjTotal)} | Remaining to split equally: {formatIndianNumberCompact(remainingForEqual)}
                 {remainingForEqual < 0 && ' (Exceeds total!)'}
               </div>
             )}

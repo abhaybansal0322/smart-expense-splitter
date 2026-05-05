@@ -1,6 +1,7 @@
 'use client';
 
 import { GroupLeaderboardEntry } from '@/lib/types';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 export function LeaderboardTab({ leaderboard }: { leaderboard: GroupLeaderboardEntry[] }) {
   if (leaderboard.length === 0) {
@@ -29,8 +30,8 @@ export function LeaderboardTab({ leaderboard }: { leaderboard: GroupLeaderboardE
             <div style={{ fontWeight: 800 }}>{entry.name}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{entry.email}</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-              <span className="badge badge-purple">Paid Rs. {entry.total_paid.toFixed(2)}</span>
-              <span className="badge badge-green">Settled Rs. {entry.settled_paid.toFixed(2)}</span>
+              <span className="badge badge-purple">Paid {formatIndianNumberCompact(entry.total_paid)}</span>
+              <span className="badge badge-green">Settled {formatIndianNumberCompact(entry.settled_paid)}</span>
               <span className="badge">{entry.settleups_confirmed} settle ups</span>
             </div>
           </div>

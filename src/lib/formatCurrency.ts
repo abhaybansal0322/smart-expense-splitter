@@ -1,5 +1,16 @@
-// ─────────────── Currency Formatting ───────────────
-// Shared currency formatting utility.
+export function formatIndianNumberCompact(amount: number): string {
+  if (amount < 100000) {
+    return formatIndianCurrency(amount);
+  }
+  
+  if (amount < 10000000) {
+    const lakhs = amount / 100000;
+    return `₹${lakhs.toFixed(2)} Lakh`;
+  }
+  
+  const crores = amount / 10000000;
+  return `₹${crores.toFixed(2)} Cr`;
+}
 
 export function formatIndianCurrency(amount: number): string {
   return new Intl.NumberFormat('en-IN', {

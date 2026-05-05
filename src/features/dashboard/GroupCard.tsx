@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Avatar } from '@/components/Avatar';
 import { GroupWithDetails } from '@/lib/types';
-import { formatIndianCurrency } from '@/lib/formatCurrency';
+import { formatIndianCurrency, formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 export function GroupCard({ group }: { group: GroupWithDetails }) {
   const members = Array.isArray(group.members) ? group.members : [];
@@ -51,7 +51,7 @@ export function GroupCard({ group }: { group: GroupWithDetails }) {
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>TOTAL SPENT</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {formatIndianCurrency(group.total_expenses ?? 0)}
+              {formatIndianNumberCompact(group.total_expenses ?? 0)}
             </div>
           </div>
           <div style={{

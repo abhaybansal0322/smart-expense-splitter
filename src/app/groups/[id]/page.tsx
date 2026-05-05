@@ -13,6 +13,7 @@ import { SettlementsTab } from '@/features/settlements/SettlementsTab';
 import { LeaderboardTab } from '@/features/leaderboard/LeaderboardTab';
 import { MembersTab } from '@/features/members/MembersTab';
 import { ActivityTab } from '@/features/activity/ActivityTab';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 export default function GroupPage() {
   const params = useParams();
@@ -74,7 +75,7 @@ export default function GroupPage() {
             )}
             <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
               <StatPill label="Members" value={members.length} />
-              <StatPill label="Total Spent" value={`₹${(group.total_expenses ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} />
+              <StatPill label="Total Spent" value={formatIndianNumberCompact(group.total_expenses ?? 0)} />
               <StatPill label="Settle Up" value={`${settlements.length} txn`} highlight={settlements.length > 0} />
             </div>
           </div>

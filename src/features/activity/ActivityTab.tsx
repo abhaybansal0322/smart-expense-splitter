@@ -2,7 +2,7 @@
 
 import { Avatar } from '@/components/Avatar';
 import { Activity } from '@/lib/types';
-import { formatIndianCurrency, formatRelativeTime } from '@/lib/formatCurrency';
+import { formatIndianCurrency, formatIndianNumberCompact, formatRelativeTime } from '@/lib/formatCurrency';
 
 export function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boolean }) {
   if (loading) {
@@ -39,13 +39,13 @@ export function ActivityTab({ activity, loading }: { activity: Activity[]; loadi
 
     switch (a.action) {
       case 'EXPENSE_CREATED':
-        return <>{userName} added {description} <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatIndianCurrency(amount)}</span></>;
+        return <>{userName} added {description} <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatIndianNumberCompact(amount)}</span></>;
       case 'EXPENSE_UPDATED':
-        return <>{userName} updated expense from <span style={{ color: 'var(--text-muted)', textDecoration: 'line-through' }}>{formatIndianCurrency(oldAmount)}</span> → <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatIndianCurrency(newAmount)}</span></>;
+        return <>{userName} updated expense from <span style={{ color: 'var(--text-muted)', textDecoration: 'line-through' }}>{formatIndianNumberCompact(oldAmount)}</span> → <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{formatIndianNumberCompact(newAmount)}</span></>;
       case 'EXPENSE_DELETED':
-        return <>{userName} deleted {description} ({formatIndianCurrency(amount)})</>;
+        return <>{userName} deleted {description} ({formatIndianNumberCompact(amount)})</>;
       case 'SETTLEMENT_CREATED':
-        return <>{userName} paid <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>{formatIndianCurrency(amount)}</span></>;
+        return <>{userName} paid <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>{formatIndianNumberCompact(amount)}</span></>;
       default:
         return <>{`${a.user.name} performed an action`}</>;
     }
