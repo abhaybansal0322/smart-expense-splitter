@@ -8,6 +8,25 @@ import { useToast } from '@/components/Toast';
 import { GroupInvitation, GroupWithDetails } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 
+/** Format a rupee amount into compact Indian notation (Lakh / Crore). */
+function formatIndianCurrency(amount: number): string {
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  if (abs >= 1_00_00_000) {
+    const val = (abs / 1_00_00_000).toFixed(2).replace(/\.?0+$/, '');
+    return `${sign}₹${val} Cr`;
+  }
+  if (abs >= 1_00_000) {
+    const val = (abs / 1_00_000).toFixed(2).replace(/\.?0+$/, '');
+    return `${sign}₹${val} L`;
+  }
+  if (abs >= 1_000) {
+    const val = (abs / 1_000).toFixed(2).replace(/\.?0+$/, '');
+    return `${sign}₹${val} K`;
+  }
+  return `${sign}₹${abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export default function DashboardPage() {
   const [groups, setGroups] = useState<GroupWithDetails[]>([]);
   const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
@@ -93,7 +112,7 @@ export default function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 40 }} className="animate-fade-in">
           {[
             { label: 'Total Groups', value: groups.length, icon: '◈', color: 'var(--accent-primary)' },
-            { label: 'Total Expenses', value: `₹${totalExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: '₹', color: 'var(--accent-secondary)' },
+            { label: 'Total Expenses', value: formatIndianCurrency(totalExpenses), icon: '₹', color: 'var(--accent-secondary)' },
             { label: 'Pending Settlements', value: totalPending, icon: '⏳', color: totalPending > 0 ? 'var(--accent-warning)' : 'var(--accent-success)' },
           ].map((stat) => (
             <div key={stat.label} className="glass-card" style={{ padding: '20px 24px' }}>
@@ -270,7 +289,7 @@ function GroupCard({ group }: { group: GroupWithDetails }) {
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>TOTAL SPENT</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-              ₹{(group.total_expenses ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatIndianCurrency(group.total_expenses ?? 0)}
             </div>
           </div>
           <div style={{

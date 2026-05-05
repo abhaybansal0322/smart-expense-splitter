@@ -11,15 +11,33 @@ export interface LeaderboardBaseRow {
 }
 
 export function rankLeaderboardRows(rows: LeaderboardBaseRow[]): GroupLeaderboardEntry[] {
-  return rows
-    .map((row) => ({
+  // Compute raw scores first
+  const withRaw = rows.map((row) => ({
+    ...row,
+    total_paid: Number(row.total_paid) || 0,
+    settled_paid: Number(row.settled_paid) || 0,
+    settleups_confirmed: Number(row.settleups_confirmed) || 0,
+    rawScore:
+      (Number(row.total_paid) || 0) +
+      (Number(row.settled_paid) || 0) * 1.25 +
+      (Number(row.settleups_confirmed) || 0) * 25,
+  }));
+
+  const maxRaw = Math.max(...withRaw.map((r) => r.rawScore), 0);
+  const minRaw = Math.min(...withRaw.map((r) => r.rawScore), 0);
+  const range = maxRaw - minRaw;
+
+  // Normalize to [1, 100]; if all scores are equal everyone gets 100
+  const normalize = (raw: number): number => {
+    if (range === 0) return 100;
+    const normalized = 1 + ((raw - minRaw) / range) * 99;
+    return Math.round(normalized * 100) / 100;
+  };
+
+  return withRaw
+    .map(({ rawScore, ...row }) => ({
       ...row,
-      total_paid: Number(row.total_paid) || 0,
-      settled_paid: Number(row.settled_paid) || 0,
-      settleups_confirmed: Number(row.settleups_confirmed) || 0,
-      score: Math.round(
-        ((Number(row.total_paid) || 0) + (Number(row.settled_paid) || 0) * 1.25 + (Number(row.settleups_confirmed) || 0) * 25) * 100
-      ) / 100,
+      score: normalize(rawScore),
     }))
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
     .map((row, index) => ({

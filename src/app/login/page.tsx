@@ -59,10 +59,10 @@ function LoginForm() {
     });
 
     if (res?.error) {
-      setError(res.error);
+      setError(res.error === 'CredentialsSignin' ? 'Invalid email or password.' : res.error);
       setLoading(false);
-    } else {
-      router.push('/');
+    } else if (res?.ok) {
+      await router.push('/');
       router.refresh();
     }
   };
