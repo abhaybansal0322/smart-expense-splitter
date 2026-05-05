@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSettlementPlan } from '@/services/settlementService';
-import { isUserInGroup } from '@/services/groupService';
+import { GroupRepository } from '@/db/repositories/GroupRepository';
+import { SettlementRepository } from '@/db/repositories/SettlementRepository';
 import { getAuthSession } from '@/lib/auth';
-import { query } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
 
@@ -15,25 +15,33 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const session = await getAuthSession();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const isMember = await isUserInGroup(id, session.user.id);
+    const isMember = await GroupRepository.isUserInGroup(id, session.user.id);
     if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     logger.info('Computing settlement plan', { request_id, user_id: session.user.id, group_id: id });
 
-    const [plan, { rows: saved }] = await Promise.all([
+    const [plan, saved] = await Promise.all([
       getSettlementPlan(id),
-      query(
-        `SELECT s.id, s.from_user, s.to_user, s.amount::float, s.status, s.created_at, s.confirmed_at,
-                fu.name AS from_name, tu.name AS to_name
-         FROM settlements s
-         JOIN users fu ON fu.id = s.from_user
-         JOIN users tu ON tu.id = s.to_user
-         WHERE s.group_id = $1
-         ORDER BY s.created_at DESC`,
-        [id]
-      ),
+      SettlementRepository.findByGroup(id),
     ]);
-    return NextResponse.json({ plan, settlements: saved, current_user_id: session.user.id });
+
+    const formattedSettlements = saved.map(s => ({
+      id: s.id,
+      from_user: s.fromUser,
+      to_user: s.toUser,
+      amount: Number(s.amount),
+      status: s.status,
+      created_at: s.createdAt,
+      confirmed_at: s.confirmedAt,
+      from_name: s.sender.name,
+      to_name: s.receiver.name
+    }));
+
+    return NextResponse.json({ 
+      plan, 
+      settlements: formattedSettlements, 
+      current_user_id: session.user.id 
+    });
   } catch (error) {
     logger.error('GET /api/groups/[id]/settlements error', { request_id, group_id: id }, error);
     return NextResponse.json({ error: 'Failed to fetch settlements' }, { status: 500 });

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { updateExpense, deleteExpense } from '@/services/expenseService';
 import { getAuthSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { ExpenseRepository } from '@/db/repositories/ExpenseRepository';
+import { GroupRepository } from '@/db/repositories/GroupRepository';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
 
@@ -29,11 +30,6 @@ const UpdateExpenseSchema = z.object({
 
 type Params = { params: Promise<{ id: string }> };
 
-interface ExpenseAccessRow {
-  group_id: string;
-  is_member: boolean;
-}
-
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -45,24 +41,15 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const session = await getAuthSession();
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Fetch expense and verify group membership in ONE round trip
-    const { rows } = await query<ExpenseAccessRow>(
-      `SELECT e.group_id, 
-              CASE WHEN gm.user_id IS NOT NULL THEN true ELSE false END AS is_member
-       FROM expenses e
-       LEFT JOIN group_members gm ON gm.group_id = e.group_id AND gm.user_id = $2 AND gm.status = 'accepted'
-       WHERE e.id = $1`,
-      [id, session.user.id]
-    );
-
-    if (rows.length === 0) return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
+    const expense = await ExpenseRepository.findById(id);
+    if (!expense) return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
     
-    const expense = rows[0];
-    if (!expense.is_member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const isMember = await GroupRepository.isUserInGroup(expense.groupId, session.user.id);
+    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    await deleteExpense(id, expense.group_id, session.user.id);
+    await deleteExpense(id, expense.groupId, session.user.id);
 
-    logger.info('Expense deleted', { request_id, user_id: session.user.id, group_id: expense.group_id, expenseId: id });
+    logger.info('Expense deleted', { request_id, user_id: session.user.id, group_id: expense.groupId, expenseId: id });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -92,11 +79,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const payload = parsed.data;
 
     // Verify user is in group
-    const { rowCount } = await query(
-      `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2 AND status = 'accepted'`,
-      [payload.group_id, session.user.id]
-    );
-    if (rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const isMember = await GroupRepository.isUserInGroup(payload.group_id, session.user.id);
+    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     await updateExpense({ expense_id: id, ...payload }, session.user.id);
 

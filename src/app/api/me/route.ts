@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { UserRepository } from '@/db/repositories/UserRepository';
 import { withAuth } from '@/lib/apiHandler';
 
 export const GET = withAuth(async ({ userId }) => {
-  const res = await query<{id: string, name: string, email: string}>(
-    'SELECT id, name, email FROM users WHERE id = $1', 
-    [userId]
-  );
+  const user = await UserRepository.findById(userId);
 
-  if (res.rowCount === 0) {
+  if (!user) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
-  return NextResponse.json({ user: res.rows[0] });
+  return NextResponse.json({ 
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email
+    }
+  });
 }, 'GET /api/me');

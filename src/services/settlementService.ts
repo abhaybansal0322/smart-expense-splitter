@@ -1,6 +1,6 @@
 import { db } from '@/db/client';
 import { settlements } from '@/db/schema';
-import { sql, desc } from 'drizzle-orm';
+import { sql, desc, eq } from 'drizzle-orm';
 import { UserBalance, SettlementTransaction } from '@/lib/types';
 import { minimizeTransactions } from '@/domain/balanceCalculator';
 import { eventBus, DomainEvent } from '@/lib/events';
@@ -134,7 +134,7 @@ export async function respondToSettlement(
     if (action === 'confirm') {
       await tx.update(settlements)
         .set({ status: 'confirmed', confirmedAt: new Date() })
-        .where((table, { eq }) => eq(table.id, settlementId));
+        .where(eq(settlements.id, settlementId));
 
       eventBus.emit(DomainEvent.SETTLEMENT_CONFIRMED, {
         userId: userId,
@@ -148,7 +148,7 @@ export async function respondToSettlement(
     } else {
       await tx.update(settlements)
         .set({ status: 'cancelled' })
-        .where((table, { eq }) => eq(table.id, settlementId));
+        .where(eq(settlements.id, settlementId));
     }
   });
 }

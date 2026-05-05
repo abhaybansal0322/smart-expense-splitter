@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { db } from '@/db/client';
+import { sql } from 'drizzle-orm';
 import { getAuthSession } from '@/lib/auth';
 
 type Params = { params: Promise<{ id: string }> };
@@ -15,8 +16,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { rows } = await query(
-      `SELECT
+    const result = await db.execute(sql`
+      SELECT
          e.id AS expense_id,
          e.description,
          e.amount::float,
@@ -30,10 +31,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
        JOIN expenses e ON e.id = es.expense_id
        JOIN users u ON u.id = e.paid_by
        JOIN groups g ON g.id = e.group_id
-       WHERE es.user_id = $1
+       WHERE es.user_id = ${id}
          AND es.user_id <> e.paid_by
          AND e.deleted_at IS NULL
-         AND e.created_at < NOW() - INTERVAL '${OVERDUE_DAYS} days'
+         AND e.created_at < NOW() - INTERVAL '7 days'
          AND NOT EXISTS (
            SELECT 1 FROM settlements s
            WHERE s.from_user = es.user_id
@@ -41,9 +42,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
              AND s.group_id = e.group_id
              AND s.status = 'confirmed'
          )
-       ORDER BY e.created_at ASC`,
-      [id]
-    );
+       ORDER BY e.created_at ASC
+    `);
+
+    const rows = (result.rows || result) as any[];
     return NextResponse.json({ dues: rows, overdueDays: OVERDUE_DAYS });
   } catch (error) {
     console.error('GET /api/users/[id]/dues error:', error);

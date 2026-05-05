@@ -38,6 +38,17 @@ export class SettlementRepository {
     return settlement;
   }
 
+  static async findByGroup(groupId: string) {
+    return db.query.settlements.findMany({
+      where: eq(settlements.groupId, groupId),
+      with: {
+        sender: true,
+        receiver: true
+      },
+      orderBy: [desc(settlements.createdAt)]
+    });
+  }
+
   static async updateStatus(id: string, status: 'confirmed' | 'cancelled', confirmedAt?: Date) {
     await db.update(settlements)
       .set({ status, confirmedAt })

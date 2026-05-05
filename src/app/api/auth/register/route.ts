@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { query } from '@/lib/db';
+import { UserRepository } from '@/db/repositories/UserRepository';
 
 export async function POST(req: Request) {
   try {
@@ -11,16 +11,17 @@ export async function POST(req: Request) {
     }
 
     const emailLower = email.toLowerCase();
-    const existingUser = await query('SELECT id FROM users WHERE email = $1', [emailLower]);
-    if (existingUser.rowCount > 0) {
+    const existingUser = await UserRepository.findByEmail(emailLower);
+    if (existingUser) {
       return NextResponse.json({ message: 'User already exists' }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await query(
-      'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3)',
-      [name, emailLower, hashedPassword]
-    );
+    await UserRepository.create({
+      name,
+      email: emailLower,
+      passwordHash: hashedPassword
+    });
 
     return NextResponse.json({ message: 'User created successfully' }, { status: 201 });
   } catch (error) {
