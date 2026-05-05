@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { db } from '@/db/client';
+import { activityLogs } from '@/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { getAuthSession } from '@/lib/auth';
 import { isUserInGroup } from '@/services/groupService';
 
@@ -16,16 +18,19 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     const limit = 50;
     
-    const { rows } = await query(
-      `SELECT a.id, a.action, a.entity_type, a.metadata, a.created_at,
-              json_build_object('id', u.id, 'name', u.name) as user
-       FROM activity_logs a
-       JOIN users u ON u.id = a.user_id
-       WHERE a.group_id = $1
-       ORDER BY a.created_at DESC
-       LIMIT $2`,
-      [groupId, limit]
-    );
+    const rows = await db.query.activityLogs.findMany({
+      where: eq(activityLogs.groupId, groupId),
+      with: {
+        user: {
+          columns: {
+            id: true,
+            name: true
+          }
+        }
+      },
+      orderBy: [desc(activityLogs.createdAt)],
+      limit: limit
+    });
 
     return NextResponse.json({ activity: rows });
   } catch (error) {

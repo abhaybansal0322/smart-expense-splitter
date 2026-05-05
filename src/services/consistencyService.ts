@@ -1,4 +1,5 @@
-import { query } from '@/lib/db';
+import { db } from '@/db/client';
+import { sql } from 'drizzle-orm';
 
 export interface ConsistencyReport {
   expenseSplitSumMismatches: unknown[];
@@ -34,8 +35,7 @@ export async function runConsistencyCheck(): Promise<ConsistencyReport> {
   };
 
   // 1. Verify: SUM(splits) = expense.amount
-  // Using LEFT JOIN to also catch expenses that have absolutely no splits
-  const sumMismatchRes = await query(`
+  const sumMismatchRes = await db.execute(sql`
     WITH split_sums AS (
       SELECT expense_id, SUM(share) as total_shares
       FROM expense_splits
@@ -49,7 +49,7 @@ export async function runConsistencyCheck(): Promise<ConsistencyReport> {
   report.expenseSplitSumMismatches = sumMismatchRes.rows;
 
   // 2. Verify: No orphan expense_splits
-  const orphanSplitsRes = await query(`
+  const orphanSplitsRes = await db.execute(sql`
     SELECT es.id, es.expense_id
     FROM expense_splits es
     LEFT JOIN expenses e ON es.expense_id = e.id
@@ -58,7 +58,7 @@ export async function runConsistencyCheck(): Promise<ConsistencyReport> {
   report.orphanExpenseSplits = orphanSplitsRes.rows;
 
   // 3. Verify: No invalid settlements
-  const invalidSettlementsRes = await query(`
+  const invalidSettlementsRes = await db.execute(sql`
     SELECT id, from_user, to_user, amount
     FROM settlements
     WHERE from_user = to_user OR amount <= 0
@@ -66,18 +66,17 @@ export async function runConsistencyCheck(): Promise<ConsistencyReport> {
   report.invalidSettlements = invalidSettlementsRes.rows;
 
   // 4. Detect: negative anomalies
-  const negativeExpensesRes = await query(`SELECT id, amount FROM expenses WHERE amount < 0`);
+  const negativeExpensesRes = await db.execute(sql`SELECT id, amount FROM expenses WHERE amount < 0`);
   report.negativeAnomalies.expenses = negativeExpensesRes.rows;
 
-  const negativeSplitsRes = await query(`SELECT id, share FROM expense_splits WHERE share < 0`);
+  const negativeSplitsRes = await db.execute(sql`SELECT id, share FROM expense_splits WHERE share < 0`);
   report.negativeAnomalies.expenseSplits = negativeSplitsRes.rows;
 
-  const negativeSettlementsRes = await query(`SELECT id, amount FROM settlements WHERE amount < 0`);
+  const negativeSettlementsRes = await db.execute(sql`SELECT id, amount FROM settlements WHERE amount < 0`);
   report.negativeAnomalies.settlements = negativeSettlementsRes.rows;
 
   // 5. Detect: duplicate records
-  // Duplicate expenses: Same group, payer, amount, description within 5 minutes
-  const dupExpensesRes = await query(`
+  const dupExpensesRes = await db.execute(sql`
     SELECT e1.id as id1, e2.id as id2, e1.group_id, e1.paid_by, e1.amount, e1.description
     FROM expenses e1
     JOIN expenses e2 ON e1.group_id = e2.group_id
@@ -90,8 +89,7 @@ export async function runConsistencyCheck(): Promise<ConsistencyReport> {
   `);
   report.duplicateRecords.expenses = dupExpensesRes.rows;
 
-  // Duplicate expense_splits: Same expense_id and user_id
-  const dupSplitsRes = await query(`
+  const dupSplitsRes = await db.execute(sql`
     SELECT expense_id, user_id, COUNT(*) as count
     FROM expense_splits
     GROUP BY expense_id, user_id
@@ -99,8 +97,7 @@ export async function runConsistencyCheck(): Promise<ConsistencyReport> {
   `);
   report.duplicateRecords.expenseSplits = dupSplitsRes.rows;
 
-  // Duplicate settlements: Same group, from, to, amount within 5 minutes
-  const dupSettlementsRes = await query(`
+  const dupSettlementsRes = await db.execute(sql`
     SELECT s1.id as id1, s2.id as id2, s1.group_id, s1.from_user, s1.to_user, s1.amount
     FROM settlements s1
     JOIN settlements s2 ON s1.group_id = s2.group_id

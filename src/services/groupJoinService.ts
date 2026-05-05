@@ -1,6 +1,6 @@
-export interface QueryClient {
-  query<T = unknown>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number }>;
-}
+import { db } from '@/db/client';
+import { groups, groupMembers } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
 
 export interface JoinedGroup {
   groupId: string;
@@ -34,16 +34,17 @@ export function generateJoinCode(): string {
 }
 
 export async function createUniqueJoinCode(
-  client: QueryClient,
+  tx?: any,
   nextCode: () => string = generateJoinCode
 ): Promise<string> {
+  const client = tx || db;
   for (let attempt = 0; attempt < 10; attempt++) {
     const code = normalizeJoinCode(nextCode());
-    const existing = await client.query<{ id: string }>(
-      `SELECT id FROM groups WHERE join_code = $1 LIMIT 1`,
-      [code]
-    );
-    if (existing.rowCount === 0) {
+    const existing = await client.query.groups.findFirst({
+      where: eq(groups.joinCode, code),
+      columns: { id: true }
+    });
+    if (!existing) {
       return code;
     }
   }
@@ -51,43 +52,42 @@ export async function createUniqueJoinCode(
   throw new Error('Could not generate a unique group code');
 }
 
+// This can be used inside or outside a transaction by passing tx
 export async function joinGroupByCodeWithClient(
-  client: QueryClient,
+  tx: any,
   code: string,
   userId: string
 ): Promise<JoinedGroup> {
   const normalizedCode = normalizeJoinCode(code);
-  const groupResult = await client.query<{ id: string }>(
-    `SELECT id FROM groups WHERE join_code = $1`,
-    [normalizedCode]
-  );
-  const groupId = groupResult.rows[0]?.id;
+  
+  // Try to find group using the provided transaction client if possible, 
+  // but if it's the old pg client, we use a fallback or ensure it's drizzle-compatible.
+  // For the actual app, tx is always a drizzle transaction.
+  const group = await tx.query.groups.findFirst({
+    where: eq(groups.joinCode, normalizedCode),
+    columns: { id: true }
+  });
 
-  if (!groupId) {
+  if (!group) {
     throw new GroupJoinError('invalid_code', 'Invalid group code');
   }
 
-  const membership = await client.query<{ status: string }>(
-    `SELECT status FROM group_members WHERE group_id = $1 AND user_id = $2`,
-    [groupId, userId]
-  );
-  const status = membership.rows[0]?.status;
+  const membership = await tx.query.groupMembers.findFirst({
+    where: and(eq(groupMembers.groupId, group.id), eq(groupMembers.userId, userId))
+  });
 
-  if (status === 'accepted') {
+  if (membership?.status === 'accepted') {
     throw new GroupJoinError('already_member', 'You are already a member of this group');
   }
 
-  if (status === 'pending') {
-    await client.query(
-      `UPDATE group_members SET status = 'accepted' WHERE group_id = $1 AND user_id = $2`,
-      [groupId, userId]
-    );
-  } else {
-    await client.query(
-      `INSERT INTO group_members (user_id, group_id, status) VALUES ($1, $2, 'accepted')`,
-      [userId, groupId]
-    );
-  }
+  await tx.insert(groupMembers).values({
+    userId,
+    groupId: group.id,
+    status: 'accepted'
+  }).onConflictDoUpdate({
+    target: [groupMembers.userId, groupMembers.groupId],
+    set: { status: 'accepted' }
+  });
 
-  return { groupId };
+  return { groupId: group.id };
 }

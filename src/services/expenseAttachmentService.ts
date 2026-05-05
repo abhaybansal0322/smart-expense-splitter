@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { query } from '@/lib/db';
+import { db } from '@/db/client';
+import { expenseAttachments } from '@/db/schema';
 import { ExpenseAttachment } from '@/lib/types';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -48,12 +49,23 @@ export async function saveExpenseImageAttachment(params: {
 
   await writeFile(diskPath, bytes);
 
-  const { rows } = await query<ExpenseAttachment>(
-    `INSERT INTO expense_attachments (expense_id, file_url, original_name, mime_type, size_bytes, uploaded_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, expense_id, file_url, original_name, mime_type, size_bytes, uploaded_by, created_at`,
-    [params.expenseId, fileUrl, params.file.name, params.file.type, params.file.size, params.uploadedBy]
-  );
+  const [newAttachment] = await db.insert(expenseAttachments).values({
+    expenseId: params.expenseId,
+    fileUrl,
+    originalName: params.file.name,
+    mimeType: params.file.type,
+    sizeBytes: params.file.size,
+    uploadedBy: params.uploadedBy
+  }).returning();
 
-  return rows[0];
+  return {
+    id: newAttachment.id,
+    expense_id: newAttachment.expenseId,
+    file_url: newAttachment.fileUrl,
+    original_name: newAttachment.originalName,
+    mime_type: newAttachment.mimeType,
+    size_bytes: newAttachment.sizeBytes,
+    uploaded_by: newAttachment.uploadedBy,
+    created_at: newAttachment.createdAt.toISOString()
+  };
 }

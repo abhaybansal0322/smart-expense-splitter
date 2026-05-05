@@ -25,8 +25,13 @@ export function useGroupDetails(groupId: string, showToast: (msg: string, type: 
   const fetchAll = useCallback(async () => {
     try {
       const res = await fetch(`/api/groups/${groupId}/details`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("fetch failed with status", res.status, text.substring(0, 500));
+        router.push('/');
+        return;
+      }
       const data = await res.json();
-      if (!res.ok) { router.push('/'); return; }
       setGroup(data.group);
       setExpenses(data.expenses ?? []);
       setBalances(data.balances ?? []);
@@ -37,7 +42,7 @@ export function useGroupDetails(groupId: string, showToast: (msg: string, type: 
         setCurrentUserId(data.settlements.current_user_id ?? null);
       }
     } catch (err) {
-      console.error("fetchAll error", err);
+      console.error("fetchAll catch block", err);
       showToast('Failed to load group data', 'error');
     } finally {
       setLoading(false);

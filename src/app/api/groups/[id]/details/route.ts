@@ -3,7 +3,9 @@ import { getGroupById, isUserInGroup } from '@/services/groupService';
 import { getExpensesByGroup } from '@/services/expenseService';
 import { computeGroupBalances, minimizeTransactions } from '@/services/settlementService';
 import { getGroupLeaderboard } from '@/services/leaderboardService';
-import { query } from '@/lib/db';
+import { db } from '@/db/client';
+import { settlements, users } from '@/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { getAuthSession } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
@@ -22,26 +24,38 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     logger.info('Fetching comprehensive group details', { request_id, user_id: session.user.id, group_id: id });
 
-    const [group, expenses, balances, leaderboard, { rows: savedSettlements }] = await Promise.all([
+    // Use Drizzle for settlements query as well
+    const [group, expenses, balances, leaderboard, savedSettlementsRaw] = await Promise.all([
       getGroupById(id),
       getExpensesByGroup(id),
       computeGroupBalances(id),
       getGroupLeaderboard(id),
-      query(
-        `SELECT s.id, s.from_user, s.to_user, s.amount::float, s.status, s.created_at, s.confirmed_at,
-                fu.name AS from_name, tu.name AS to_name
-         FROM settlements s
-         JOIN users fu ON fu.id = s.from_user
-         JOIN users tu ON tu.id = s.to_user
-         WHERE s.group_id = $1
-         ORDER BY s.created_at DESC`,
-        [id]
-      )
+      db.query.settlements.findMany({
+        where: eq(settlements.groupId, id),
+        with: {
+          sender: true,
+          receiver: true
+        },
+        orderBy: [desc(settlements.createdAt)]
+      })
     ]);
 
     if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 });
 
     const plan = minimizeTransactions(balances);
+
+    // Map savedSettlements to match the expected format (from_name, to_name, amount as number)
+    const savedSettlements = savedSettlementsRaw.map(s => ({
+      id: s.id,
+      from_user: s.fromUser,
+      to_user: s.toUser,
+      amount: Number(s.amount),
+      status: s.status,
+      created_at: s.createdAt.toISOString(),
+      confirmed_at: s.confirmedAt?.toISOString() || null,
+      from_name: s.sender.name,
+      to_name: s.receiver.name
+    }));
 
     return NextResponse.json({
       group,

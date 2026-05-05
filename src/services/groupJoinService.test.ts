@@ -54,15 +54,37 @@ function createClient() {
       ('u2', 'g2', 'pending');
   `);
 
-  return {
-    db,
-    client: {
-      query: async (text: string, params?: unknown[]) => {
-        const result = db.public.query(bindParams(text, params));
-        return { rows: result.rows, rowCount: result.rowCount };
+  const client = {
+    query: {
+      groups: {
+        findFirst: async ({ where }: any) => {
+          // Simplified mock: find by joinCode
+          const sql = bindParams('SELECT id FROM groups WHERE join_code = $1', [where.value]);
+          const result = db.public.query(sql);
+          return result.rows[0] ?? null;
+        }
       },
+      groupMembers: {
+        findFirst: async ({ where }: any) => {
+          // Simplified mock: find by groupId and userId
+          const sql = bindParams('SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2', [where.left.value, where.right.value]);
+          const result = db.public.query(sql);
+          return result.rows[0] ?? null;
+        }
+      }
     },
+    insert: (table: any) => ({
+      values: (data: any) => ({
+        onConflictDoUpdate: () => {
+          const sql = bindParams('INSERT INTO group_members (user_id, group_id, status) VALUES ($1, $2, $3) ON CONFLICT (user_id, group_id) DO UPDATE SET status = EXCLUDED.status', [data.userId, data.groupId, data.status]);
+          db.public.none(sql);
+          return Promise.resolve();
+        }
+      })
+    })
   };
+
+  return { db, client };
 }
 
 test('normalizeJoinCode accepts forgiving user input', () => {

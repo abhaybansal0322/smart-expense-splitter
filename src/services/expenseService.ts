@@ -1,5 +1,6 @@
-import { PoolClient } from '@neondatabase/serverless';
-import { query, withTransaction } from '@/lib/db';
+import { db } from '@/db/client';
+import { expenses, expenseSplits, expenseSpotifyTracks, groupMembers } from '@/db/schema';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { logActivity } from '@/services/activityService';
 import {
   CreateExpensePayload,
@@ -8,11 +9,10 @@ import {
 } from '@/lib/types';
 import { computeSplits } from '@/domain/splitCalculators';
 
-// Re-export computeSplits for consumers that still import from here
 export { computeSplits } from '@/domain/splitCalculators';
 
 async function verifyUsersAreGroupMembers(
-  client: PoolClient,
+  tx: any,
   groupId: string,
   userIds: string[]
 ): Promise<void> {
@@ -21,65 +21,55 @@ async function verifyUsersAreGroupMembers(
     throw new Error('At least one participant is required');
   }
 
-  const result = await client.query<{ user_id: string }>(
-    `SELECT user_id
-     FROM group_members
-     WHERE group_id = $1
-       AND status = 'accepted'
-       AND user_id = ANY($2::uuid[])`,
-    [groupId, uniqueUserIds]
-  );
+  const members = await tx.query.groupMembers.findMany({
+    where: and(
+      eq(groupMembers.groupId, groupId),
+      eq(groupMembers.status, 'accepted'),
+      inArray(groupMembers.userId, uniqueUserIds)
+    )
+  });
 
-  if (result.rowCount !== uniqueUserIds.length) {
+  if (members.length !== uniqueUserIds.length) {
     throw new Error('All payers and participants must be accepted members of the group');
   }
 }
 
-// ─────────────── Service Functions ───────────────
-
 export async function createExpense(payload: CreateExpensePayload, userId?: string): Promise<string> {
   const shares = computeSplits(payload);
 
-  return withTransaction(async (client: PoolClient) => {
-    await verifyUsersAreGroupMembers(client, payload.group_id, [
+  return db.transaction(async (tx) => {
+    await verifyUsersAreGroupMembers(tx, payload.group_id, [
       payload.paid_by,
       ...Object.keys(shares),
     ]);
 
-    // Insert expense
-    const expResult = await client.query<{ id: string }>(
-      `INSERT INTO expenses (group_id, paid_by, amount, description, category, split_type)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id`,
-      [payload.group_id, payload.paid_by, payload.amount, payload.description, payload.category, payload.split_type]
-    );
-    const expenseId = expResult.rows[0].id;
+    const [newExpense] = await tx.insert(expenses).values({
+      groupId: payload.group_id,
+      paidBy: payload.paid_by,
+      amount: payload.amount.toString(),
+      description: payload.description,
+      category: payload.category ?? null,
+      splitType: payload.split_type
+    }).returning();
 
-    // Insert splits
-    for (const [userId, share] of Object.entries(shares)) {
-      await client.query(
-        `INSERT INTO expense_splits (expense_id, user_id, share)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (expense_id, user_id) DO UPDATE SET share = EXCLUDED.share`,
-        [expenseId, userId, share]
-      );
+    for (const [uId, share] of Object.entries(shares)) {
+      await tx.insert(expenseSplits).values({
+        expenseId: newExpense.id,
+        userId: uId,
+        share: share.toString()
+      });
     }
 
     if (payload.spotify_track) {
-      await client.query(
-        `INSERT INTO expense_spotify_tracks
-           (expense_id, spotify_track_id, spotify_url, name, artist, album_name, album_image_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          expenseId,
-          payload.spotify_track.spotify_track_id,
-          payload.spotify_track.spotify_url,
-          payload.spotify_track.name,
-          payload.spotify_track.artist,
-          payload.spotify_track.album_name ?? null,
-          payload.spotify_track.album_image_url ?? null,
-        ]
-      );
+      await tx.insert(expenseSpotifyTracks).values({
+        expenseId: newExpense.id,
+        spotifyTrackId: payload.spotify_track.spotify_track_id,
+        spotifyUrl: payload.spotify_track.spotify_url,
+        name: payload.spotify_track.name,
+        artist: payload.spotify_track.artist,
+        albumName: payload.spotify_track.album_name ?? null,
+        albumImageUrl: payload.spotify_track.album_image_url ?? null
+      });
     }
 
     if (userId) {
@@ -88,91 +78,85 @@ export async function createExpense(payload: CreateExpensePayload, userId?: stri
         groupId: payload.group_id,
         action: 'EXPENSE_CREATED',
         entityType: 'expense',
-        entityId: expenseId,
+        entityId: newExpense.id,
         metadata: {
           amount: payload.amount,
           description: payload.description
         }
-      }, client);
+      }, tx);
     }
 
-    return expenseId;
+    return newExpense.id;
   });
 }
 
 export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDetails[]> {
-  const { rows } = await query<ExpenseWithDetails>(
-    `SELECT
-       e.id, e.group_id, e.paid_by, e.amount::float, e.description, e.split_type, e.created_at,
-       u.name AS paid_by_name,
-       (
-         SELECT COALESCE(
-           json_agg(
-             json_build_object(
-               'id', es.id,
-               'expense_id', es.expense_id,
-               'user_id', es.user_id,
-               'share', es.share::float,
-               'user_name', su.name
-             ) ORDER BY su.name
-           ),
-           '[]'
-         )
-         FROM expense_splits es
-         JOIN users su ON su.id = es.user_id
-         WHERE es.expense_id = e.id
-       ) AS splits,
-       (
-         SELECT COALESCE(
-           json_agg(
-             json_build_object(
-               'id', ea.id,
-               'expense_id', ea.expense_id,
-               'file_url', ea.file_url,
-               'original_name', ea.original_name,
-               'mime_type', ea.mime_type,
-               'size_bytes', ea.size_bytes,
-               'uploaded_by', ea.uploaded_by,
-               'created_at', ea.created_at
-             ) ORDER BY ea.created_at
-           ),
-           '[]'
-         )
-         FROM expense_attachments ea
-         WHERE ea.expense_id = e.id
-       ) AS attachments,
-       (
-         SELECT json_build_object(
-           'id', est.id,
-           'expense_id', est.expense_id,
-           'spotify_track_id', est.spotify_track_id,
-           'spotify_url', est.spotify_url,
-           'name', est.name,
-           'artist', est.artist,
-           'album_name', est.album_name,
-           'album_image_url', est.album_image_url,
-           'created_at', est.created_at
-         )
-         FROM expense_spotify_tracks est
-         WHERE est.expense_id = e.id
-       ) AS spotify_track
-     FROM expenses e
-     JOIN users u ON u.id = e.paid_by
-     WHERE e.group_id = $1 AND e.deleted_at IS NULL
-     ORDER BY e.created_at DESC`,
-    [groupId]
-  );
-  return rows;
+  const exps = await db.query.expenses.findMany({
+    where: and(eq(expenses.groupId, groupId), isNull(expenses.deletedAt)),
+    with: {
+      payer: true,
+      splits: {
+        with: {
+          user: true
+        }
+      },
+      attachments: true,
+      spotifyTrack: true
+    },
+    orderBy: (expenses, { desc }) => [desc(expenses.createdAt)]
+  });
+
+  return exps.map(e => ({
+    id: e.id,
+    group_id: e.groupId,
+    paid_by: e.paidBy,
+    amount: Number(e.amount),
+    description: e.description,
+    split_type: e.splitType,
+    created_at: e.createdAt.toISOString(),
+    paid_by_name: e.payer.name,
+    splits: e.splits.map(s => ({
+      id: s.id,
+      expense_id: s.expenseId,
+      user_id: s.userId,
+      share: Number(s.share),
+      user_name: s.user.name
+    })),
+    attachments: e.attachments.map(a => ({
+      id: a.id,
+      expense_id: a.expenseId,
+      file_url: a.fileUrl,
+      original_name: a.originalName,
+      mime_type: a.mimeType,
+      size_bytes: a.sizeBytes,
+      uploaded_by: a.uploadedBy,
+      created_at: a.createdAt.toISOString()
+    })),
+    spotify_track: e.spotifyTrack ? {
+      id: e.spotifyTrack.id,
+      expense_id: e.spotifyTrack.expenseId,
+      spotify_track_id: e.spotifyTrack.spotifyTrackId,
+      spotify_url: e.spotifyTrack.spotifyUrl,
+      name: e.spotifyTrack.name,
+      artist: e.spotifyTrack.artist,
+      album_name: e.spotifyTrack.albumName,
+      album_image_url: e.spotifyTrack.albumImageUrl,
+      created_at: e.spotifyTrack.createdAt.toISOString()
+    } : null
+  }));
 }
 
 export async function deleteExpense(expenseId: string, groupId: string, userId?: string): Promise<void> {
-  await withTransaction(async (client) => {
-    // Ensuring expense belongs to group before deleting, and capture info for logging
-    const check = await client.query(`SELECT amount, description FROM expenses WHERE id = $1 AND group_id = $2 AND deleted_at IS NULL`, [expenseId, groupId]);
-    if (check.rowCount === 0) throw new Error('Expense not found');
-    const { amount, description } = check.rows[0];
+  await db.transaction(async (tx) => {
+    const existing = await tx.query.expenses.findFirst({
+      where: and(eq(expenses.id, expenseId), eq(expenses.groupId, groupId), isNull(expenses.deletedAt))
+    });
 
-    await client.query(`UPDATE expenses SET deleted_at = NOW() WHERE id = $1`, [expenseId]);
+    if (!existing) throw new Error('Expense not found');
+
+    await tx.update(expenses)
+      .set({ deletedAt: new Date() })
+      .where(eq(expenses.id, expenseId));
 
     if (userId) {
       await logActivity({
@@ -181,34 +165,36 @@ export async function deleteExpense(expenseId: string, groupId: string, userId?:
         action: 'EXPENSE_DELETED',
         entityType: 'expense',
         entityId: expenseId,
-        metadata: { amount, description }
-      }, client);
+        metadata: { amount: Number(existing.amount), description: existing.description }
+      }, tx);
     }
   });
 }
 
 export async function updateExpense(payload: UpdateExpensePayload, userId?: string): Promise<void> {
-  return withTransaction(async (client: PoolClient) => {
-    // check existence
-    const { rows } = await client.query(`SELECT * FROM expenses WHERE id = $1 AND group_id = $2 AND deleted_at IS NULL`, [payload.expense_id, payload.group_id]);
-    if (rows.length === 0) throw new Error('Expense not found');
-    const existing = rows[0];
+  return db.transaction(async (tx) => {
+    const existing = await tx.query.expenses.findFirst({
+      where: and(eq(expenses.id, payload.expense_id), eq(expenses.groupId, payload.group_id), isNull(expenses.deletedAt))
+    });
 
-    const updatedAmount = payload.amount ?? existing.amount;
+    if (!existing) throw new Error('Expense not found');
+
+    const updatedAmount = payload.amount ?? Number(existing.amount);
     const updatedDesc = payload.description ?? existing.description;
     const updatedCat = payload.category !== undefined ? payload.category : existing.category;
-    const updatedSplitType = payload.split_type ?? existing.split_type;
+    const updatedSplitType = payload.split_type ?? existing.splitType;
 
-    await client.query(
-      `UPDATE expenses SET amount = $1, description = $2, category = $3, split_type = $4 WHERE id = $5`,
-      [updatedAmount, updatedDesc, updatedCat, updatedSplitType, payload.expense_id]
-    );
+    await tx.update(expenses).set({
+      amount: updatedAmount.toString(),
+      description: updatedDesc,
+      category: updatedCat,
+      splitType: updatedSplitType
+    }).where(eq(expenses.id, payload.expense_id));
 
     if (payload.participants || payload.split_type || payload.amount || payload.exact_amounts || payload.percentages || payload.excluded_users || payload.adjustments) {
-      // recompute splits
       const fullPayload = {
-        group_id: existing.group_id,
-        paid_by: existing.paid_by,
+        group_id: existing.groupId,
+        paid_by: existing.paidBy,
         amount: updatedAmount,
         description: updatedDesc,
         category: updatedCat,
@@ -220,61 +206,59 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
         adjustments: payload.adjustments,
       };
 
-      // If participants not provided, fetch current participants
       if (!payload.participants) {
-        const { rows: splits } = await client.query(`SELECT user_id FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
-        fullPayload.participants = splits.map(r => r.user_id);
+        const splits = await tx.query.expenseSplits.findMany({
+          where: eq(expenseSplits.expenseId, payload.expense_id),
+          columns: { userId: true }
+        });
+        fullPayload.participants = splits.map((s: { userId: string }) => s.userId);
       }
 
       const shares = computeSplits(fullPayload as CreateExpensePayload);
-      await verifyUsersAreGroupMembers(client, existing.group_id, [
-        existing.paid_by,
+      await verifyUsersAreGroupMembers(tx, existing.groupId, [
+        existing.paidBy,
         ...Object.keys(shares),
       ]);
 
-      await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [payload.expense_id]);
+      await tx.delete(expenseSplits).where(eq(expenseSplits.expenseId, payload.expense_id));
 
-      for (const [userId, share] of Object.entries(shares)) {
-        await client.query(
-          `INSERT INTO expense_splits (expense_id, user_id, share) VALUES ($1, $2, $3)`,
-          [payload.expense_id, userId, share]
-        );
+      for (const [uId, share] of Object.entries(shares)) {
+        await tx.insert(expenseSplits).values({
+          expenseId: payload.expense_id,
+          userId: uId,
+          share: share.toString()
+        });
       }
     }
 
     if ('spotify_track' in payload) {
-      await client.query(`DELETE FROM expense_spotify_tracks WHERE expense_id = $1`, [payload.expense_id]);
+      await tx.delete(expenseSpotifyTracks).where(eq(expenseSpotifyTracks.expenseId, payload.expense_id));
 
       if (payload.spotify_track) {
-        await client.query(
-          `INSERT INTO expense_spotify_tracks
-             (expense_id, spotify_track_id, spotify_url, name, artist, album_name, album_image_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            payload.expense_id,
-            payload.spotify_track.spotify_track_id,
-            payload.spotify_track.spotify_url,
-            payload.spotify_track.name,
-            payload.spotify_track.artist,
-            payload.spotify_track.album_name ?? null,
-            payload.spotify_track.album_image_url ?? null,
-          ]
-        );
+        await tx.insert(expenseSpotifyTracks).values({
+          expenseId: payload.expense_id,
+          spotifyTrackId: payload.spotify_track.spotify_track_id,
+          spotifyUrl: payload.spotify_track.spotify_url,
+          name: payload.spotify_track.name,
+          artist: payload.spotify_track.artist,
+          albumName: payload.spotify_track.album_name ?? null,
+          albumImageUrl: payload.spotify_track.album_image_url ?? null
+        });
       }
     }
 
     if (userId) {
       await logActivity({
         userId,
-        groupId: existing.group_id,
+        groupId: existing.groupId,
         action: 'EXPENSE_UPDATED',
         entityType: 'expense',
         entityId: payload.expense_id,
         metadata: {
-          old_amount: existing.amount,
+          old_amount: Number(existing.amount),
           new_amount: updatedAmount
         }
-      }, client);
+      }, tx);
     }
   });
 }
