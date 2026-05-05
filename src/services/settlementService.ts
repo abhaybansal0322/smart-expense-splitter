@@ -1,11 +1,11 @@
-import { query } from '@/lib/db';
+import { query, withTransaction } from '@/lib/db';
 import { UserBalance, SettlementTransaction } from '@/lib/types';
+import { minimizeTransactions } from '@/domain/balanceCalculator';
+import { logActivity } from './activityService';
+import { isUserInGroup } from './groupService';
 
-/**
- * Computes each member's net balance for a group.
- * net_balance > 0 → others owe them
- * net_balance < 0 → they owe others
- */
+export { minimizeTransactions } from '@/domain/balanceCalculator';
+
 export async function computeGroupBalances(groupId: string): Promise<UserBalance[]> {
   const { rows } = await query<UserBalance>(
     `WITH member_ids AS (
@@ -61,55 +61,110 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
   return rows;
 }
 
-/**
- * Greedy debt-minimization algorithm.
- * Given net balances, finds the minimum set of transactions to settle all debts.
- *
- * Time complexity: O(n²) — acceptable for group sizes up to ~50 members.
- */
-export function minimizeTransactions(balances: UserBalance[]): SettlementTransaction[] {
-  const debtors: Array<{ user_id: string; name: string; amount: number }> = [];
-  const creditors: Array<{ user_id: string; name: string; amount: number }> = [];
-
-  for (const b of balances) {
-    const rounded = parseFloat(b.net_balance.toFixed(2));
-    if (rounded < -0.005) {
-      debtors.push({ user_id: b.user_id, name: b.name, amount: Math.abs(rounded) });
-    } else if (rounded > 0.005) {
-      creditors.push({ user_id: b.user_id, name: b.name, amount: rounded });
-    }
-  }
-
-  const transactions: SettlementTransaction[] = [];
-
-  let i = 0; // creditor index
-  let j = 0; // debtor index
-
-  while (i < creditors.length && j < debtors.length) {
-    const creditor = creditors[i];
-    const debtor = debtors[j];
-    const amount = parseFloat(Math.min(creditor.amount, debtor.amount).toFixed(2));
-
-    transactions.push({
-      from_user_id: debtor.user_id,
-      from_name: debtor.name,
-      to_user_id: creditor.user_id,
-      to_name: creditor.name,
-      amount,
-    });
-
-    creditor.amount = parseFloat((creditor.amount - amount).toFixed(2));
-    debtor.amount = parseFloat((debtor.amount - amount).toFixed(2));
-
-    if (creditor.amount < 0.005) i++;
-    if (debtor.amount < 0.005) j++;
-  }
-
-  return transactions;
-}
-
-
 export async function getSettlementPlan(groupId: string): Promise<SettlementTransaction[]> {
   const balances = await computeGroupBalances(groupId);
   return minimizeTransactions(balances);
+}
+
+export async function createSettlement(
+  groupId: string,
+  fromUser: string,
+  toUser: string,
+  amount: number
+): Promise<string> {
+  if (fromUser === toUser) {
+    throw new Error('Payer and receiver must be different users');
+  }
+
+  const [payerIsMember, receiverIsMember] = await Promise.all([
+    isUserInGroup(groupId, fromUser),
+    isUserInGroup(groupId, toUser),
+  ]);
+
+  if (!payerIsMember || !receiverIsMember) {
+    throw new Error('Both users must be accepted members of this group');
+  }
+
+  const pendingDuplicate = await query(
+    `SELECT 1 FROM settlements
+     WHERE group_id = $1 AND from_user = $2 AND to_user = $3 AND status = 'pending'
+     LIMIT 1`,
+    [groupId, fromUser, toUser]
+  );
+
+  if (pendingDuplicate.rowCount && pendingDuplicate.rowCount > 0) {
+    throw new Error('A payment request is already waiting for this receiver');
+  }
+
+  const result = await query<{ id: string }>(
+    `INSERT INTO settlements (group_id, from_user, to_user, amount, status)
+     VALUES ($1, $2, $3, $4, 'pending')
+     RETURNING id`,
+    [groupId, fromUser, toUser, amount]
+  );
+
+  const settlementId = result.rows[0].id;
+
+  await logActivity({
+    userId: fromUser,
+    groupId: groupId,
+    action: 'SETTLEMENT_CREATED',
+    entityType: 'settlement',
+    entityId: settlementId,
+    metadata: { amount, fromUser, toUser }
+  });
+
+  return settlementId;
+}
+
+export async function respondToSettlement(
+  settlementId: string,
+  userId: string,
+  action: 'confirm' | 'reject'
+): Promise<void> {
+  await withTransaction(async (client) => {
+    const check = await client.query<{
+      id: string;
+      status: string;
+      to_user: string;
+    }>(
+      `SELECT id, status, to_user FROM settlements WHERE id = $1 FOR UPDATE`,
+      [settlementId]
+    );
+
+    if (check.rowCount === 0) throw new Error('Settlement not found');
+    if (check.rows[0].status !== 'pending') throw new Error('Settlement is not pending');
+    if (check.rows[0].to_user !== userId) {
+      throw new Error('Forbidden: Only the receiver can respond to this payment');
+    }
+
+    if (action === 'confirm') {
+      await client.query(
+        `UPDATE settlements SET status = 'confirmed', confirmed_at = NOW() WHERE id = $1`,
+        [settlementId]
+      );
+    } else {
+      await client.query(
+        `UPDATE settlements SET status = 'cancelled' WHERE id = $1`,
+        [settlementId]
+      );
+    }
+  });
+}
+
+export async function getSettlementsForUser(userId: string) {
+  const { rows } = await query(
+    `SELECT s.id, s.group_id, s.from_user, s.to_user, s.amount::float, s.status,
+            s.created_at, s.confirmed_at,
+            fu.name AS from_name, tu.name AS to_name,
+            g.name AS group_name
+     FROM settlements s
+     JOIN users fu ON fu.id = s.from_user
+     JOIN users tu ON tu.id = s.to_user
+     JOIN groups g ON g.id = s.group_id
+     WHERE s.from_user = $1 OR s.to_user = $1
+     ORDER BY s.created_at DESC`,
+    [userId]
+  );
+  return rows;
 }

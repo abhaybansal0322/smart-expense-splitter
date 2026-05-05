@@ -1,50 +1,10 @@
 import { query } from '@/lib/db';
 import { GroupLeaderboardEntry } from '@/lib/types';
+import { rankLeaderboardRows, LeaderboardBaseRow } from '@/domain/leaderboardScoring';
 
-export interface LeaderboardBaseRow {
-  user_id: string;
-  name: string;
-  email: string;
-  total_paid: number;
-  settled_paid: number;
-  settleups_confirmed: number;
-}
-
-export function rankLeaderboardRows(rows: LeaderboardBaseRow[]): GroupLeaderboardEntry[] {
-  // Compute raw scores first
-  const withRaw = rows.map((row) => ({
-    ...row,
-    total_paid: Number(row.total_paid) || 0,
-    settled_paid: Number(row.settled_paid) || 0,
-    settleups_confirmed: Number(row.settleups_confirmed) || 0,
-    rawScore:
-      (Number(row.total_paid) || 0) +
-      (Number(row.settled_paid) || 0) * 1.25 +
-      (Number(row.settleups_confirmed) || 0) * 25,
-  }));
-
-  const maxRaw = Math.max(...withRaw.map((r) => r.rawScore), 0);
-  const minRaw = Math.min(...withRaw.map((r) => r.rawScore), 0);
-  const range = maxRaw - minRaw;
-
-  // Normalize to [1, 100]; if all scores are equal everyone gets 100
-  const normalize = (raw: number): number => {
-    if (range === 0) return 100;
-    const normalized = 1 + ((raw - minRaw) / range) * 99;
-    return Math.round(normalized * 100) / 100;
-  };
-
-  return withRaw
-    .map(({ rawScore, ...row }) => ({
-      ...row,
-      score: normalize(rawScore),
-    }))
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
-    .map((row, index) => ({
-      ...row,
-      rank: index + 1,
-    }));
-}
+// Re-export for consumers that still import from here
+export { rankLeaderboardRows } from '@/domain/leaderboardScoring';
+export type { LeaderboardBaseRow } from '@/domain/leaderboardScoring';
 
 export async function getGroupLeaderboard(groupId: string): Promise<GroupLeaderboardEntry[]> {
   const { rows } = await query<LeaderboardBaseRow>(

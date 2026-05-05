@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createGroup, getGroupsForUser } from '@/services/groupService';
-import { getAuthSession } from '@/lib/auth';
+import { withAuth } from '@/lib/apiHandler';
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1).max(255),
@@ -9,47 +9,33 @@ const CreateGroupSchema = z.object({
   memberEmails: z.array(z.string().email()).optional().default([]),
 });
 
-export async function GET() {
-  try {
-    const session = await getAuthSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const groups = await getGroupsForUser(session.user.id);
-    return NextResponse.json({ groups });
-  } catch (error) {
-    console.error('GET /api/groups error:', error);
-    return NextResponse.json({ error: 'Failed to fetch groups' }, { status: 500 });
-  }
-}
+export const GET = withAuth(async ({ userId }) => {
+  const groups = await getGroupsForUser(userId);
+  return NextResponse.json({ groups });
+}, 'GET /api/groups');
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getAuthSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const body = await req.json();
-    const parsed = CreateGroupSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
-
-    const { name, description } = parsed.data;
-    const memberEmails = parsed.data.memberEmails.map((email) => email.trim().toLowerCase());
-    // ensure current user is in the group
-    if (!session.user.email) {
-      return NextResponse.json({ error: 'User email not found in session' }, { status: 400 });
-    }
-    const sessionEmail = session.user.email.trim().toLowerCase();
-    if (!memberEmails.includes(sessionEmail)) {
-      memberEmails.push(sessionEmail);
-    }
-    const group = await createGroup(name, description, [...new Set(memberEmails)], session.user.id, sessionEmail);
-    return NextResponse.json(group, { status: 201 });
-  } catch (error) {
-    console.error('POST /api/groups error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to create group';
-    return NextResponse.json({ error: message }, { status: 400 });
+export const POST = withAuth(async ({ req, userId, userEmail }) => {
+  const body = await req.json();
+  const parsed = CreateGroupSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-}
+
+  const { name, description } = parsed.data;
+  const memberEmails = parsed.data.memberEmails.map((email) => email.trim().toLowerCase());
+  const normalizedCreatorEmail = userEmail.trim().toLowerCase();
+  
+  if (!memberEmails.includes(normalizedCreatorEmail)) {
+    memberEmails.push(normalizedCreatorEmail);
+  }
+
+  const group = await createGroup(
+    name, 
+    description, 
+    [...new Set(memberEmails)], 
+    userId, 
+    normalizedCreatorEmail
+  );
+  
+  return NextResponse.json(group, { status: 201 });
+}, 'POST /api/groups');

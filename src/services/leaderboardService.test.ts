@@ -33,9 +33,9 @@ test('rankLeaderboardRows scores paid expenses and confirmed settle ups', () => 
   assert.deepEqual(
     rows.map((row) => ({ user_id: row.user_id, rank: row.rank, score: row.score })),
     [
-      { user_id: 'u2', rank: 1, score: 1100 },
-      { user_id: 'u3', rank: 2, score: 1000 },
-      { user_id: 'u1', rank: 3, score: 950 },
+      { user_id: 'u2', rank: 1, score: 100 },
+      { user_id: 'u3', rank: 2, score: 34 },
+      { user_id: 'u1', rank: 3, score: 1 },
     ]
   );
 });

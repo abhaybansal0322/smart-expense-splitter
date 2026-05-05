@@ -1,65 +1,28 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { CreateGroupModal, JoinGroupModal } from '@/components/GroupComponents';
 import { useToast } from '@/components/Toast';
 import { useRouter } from 'next/navigation';
-import { GroupInvitation, GroupWithDetails } from '@/lib/types';
 import Link from 'next/link';
-import { Avatar } from '@/components/GroupComponents';
+import { Avatar } from '@/components/Avatar';
+import { useDashboard } from '@/hooks/useDashboard';
+import { InvitationPanel } from '@/features/dashboard/InvitationPanel';
 
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<GroupWithDetails[]>([]);
-  const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [updatingInvitation, setUpdatingInvitation] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const { show, ToastContainer } = useToast();
   const router = useRouter();
 
-  const fetchGroups = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [groupsRes, invitationsRes] = await Promise.all([
-        fetch('/api/groups'),
-        fetch('/api/group-invitations'),
-      ]);
-      const [groupsData, invitationsData] = await Promise.all([
-        groupsRes.json(),
-        invitationsRes.json(),
-      ]);
-      setGroups(groupsData.groups ?? []);
-      setInvitations(invitationsData.invitations ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchGroups();
-  }, [fetchGroups]);
-
-  const respondToInvitation = async (groupId: string, action: 'accept' | 'decline') => {
-    setUpdatingInvitation(groupId);
-    try {
-      const res = await fetch('/api/group-invitations', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ group_id: groupId, action }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update invitation');
-      show(action === 'accept' ? 'Invitation accepted' : 'Invitation declined', 'success');
-      await fetchGroups();
-    } catch (error) {
-      show(error instanceof Error ? error.message : 'Failed to update invitation', 'error');
-    } finally {
-      setUpdatingInvitation(null);
-    }
-  };
+  const {
+    groups,
+    invitations,
+    loading,
+    updatingInvitation,
+    respondToInvitation,
+  } = useDashboard(show);
 
   return (
     <>
@@ -76,29 +39,11 @@ export default function GroupsPage() {
           </div>
         </div>
 
-        {invitations.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
-            {invitations.map((invitation) => {
-              const isUpdating = updatingInvitation === invitation.group_id;
-              return (
-                <div key={invitation.group_id} className="glass-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, borderColor: 'rgba(245, 158, 11, 0.35)' }}>
-                  <Avatar name={invitation.group_name} size={38} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, color: 'var(--accent-warning)', fontWeight: 700 }}>Group invitation</div>
-                    <div style={{ fontWeight: 700 }}>{invitation.group_name}</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                      {invitation.invited_by_name ? `${invitation.invited_by_name} invited you` : 'You were invited'}
-                    </div>
-                  </div>
-                  <button className="btn-secondary" onClick={() => respondToInvitation(invitation.group_id, 'decline')} disabled={isUpdating}>Decline</button>
-                  <button className="btn-primary" onClick={() => respondToInvitation(invitation.group_id, 'accept')} disabled={isUpdating}>
-                    {isUpdating ? 'Updating...' : 'Join'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <InvitationPanel
+          invitations={invitations}
+          updatingInvitation={updatingInvitation}
+          onRespond={respondToInvitation}
+        />
 
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

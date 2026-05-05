@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { SettlementRecord, SettlementTransaction } from '@/lib/types';
-import { Avatar } from './GroupComponents';
+import { Avatar } from './Avatar';
 
 interface SettlementCardProps {
   transaction: SettlementTransaction;

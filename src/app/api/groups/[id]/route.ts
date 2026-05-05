@@ -1,48 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getGroupById, inviteMemberToGroup, isUserInGroup } from '@/services/groupService';
-import { getAuthSession } from '@/lib/auth';
+import { NextResponse } from 'next/server';
+import { getGroupById, inviteMemberToGroup } from '@/services/groupService';
+import { withGroupAccess } from '@/lib/apiHandler';
 import { z } from 'zod';
 
-type Params = { params: Promise<{ id: string }> };
-
-export async function GET(_req: NextRequest, { params }: Params) {
-  const { id } = await params;
-  try {
-    const session = await getAuthSession();
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const isMember = await isUserInGroup(id, session.user.id);
-    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    const group = await getGroupById(id);
-    if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 });
-    return NextResponse.json({ group });
-  } catch (error) {
-    console.error('GET /api/groups/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to fetch group' }, { status: 500 });
-  }
-}
+export const GET = withGroupAccess(async ({ groupId }) => {
+  const group = await getGroupById(groupId);
+  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 });
+  return NextResponse.json({ group });
+}, 'GET /api/groups/[id]');
 
 const AddMemberSchema = z.object({ email: z.string().email() });
 
-export async function PATCH(req: NextRequest, { params }: Params) {
-  const { id } = await params;
-  try {
-    const session = await getAuthSession();
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const isMember = await isUserInGroup(id, session.user.id);
-    if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    const body = await req.json();
-    const parsed = AddMemberSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
-    await inviteMemberToGroup(id, parsed.data.email);
-    return NextResponse.json({ success: true, status: 'pending' });
-  } catch (error) {
-    console.error('PATCH /api/groups/[id] error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to invite member';
-    const status = message.includes('No account') || message.includes('already') ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+export const PATCH = withGroupAccess(async ({ req, groupId }) => {
+  const body = await req.json();
+  const parsed = AddMemberSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-}
+  await inviteMemberToGroup(groupId, parsed.data.email);
+  return NextResponse.json({ success: true, status: 'pending' });
+}, 'PATCH /api/groups/[id]');
