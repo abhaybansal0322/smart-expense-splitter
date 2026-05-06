@@ -1,6 +1,6 @@
-# Smart Split Elite 💎
+# Smart Split Elite
 
-A sophisticated, production-grade expense management platform engineered for precision, speed, and collaborative financial tracking.
+A production-minded expense management platform for group spending, precise split math, settlement planning, and collaborative financial history.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![Drizzle ORM](https://img.shields.io/badge/Drizzle-ORM-blue?logo=drizzle)](https://orm.drizzle.team/)
@@ -8,18 +8,21 @@ A sophisticated, production-grade expense management platform engineered for pre
 
 ---
 
-## 🤖 Built with AI Agents
+## Built with AI Agents
 
-This project is a flagship example of **Agentic Development**. It was constructed through a deep collaboration between a human architect and a swarm of specialized AI agents:
-- **Google Gemini 3.1 Pro & Flash**: Orchestrated high-level architecture and complex financial logic.
-- **Antigravity**: Managed the workspace, handled large-scale refactors (like the UPI excision), and optimized the Docker environment.
-- **Code Review Graph**: Maintained a structural map of the project, ensuring consistency across the database, services, and UI.
+This project is also an example of agent-assisted development. The goal was not to use AI as a shortcut, but to use agents for the work they are good at: exploring a large surface area, keeping architectural consistency visible, and rapidly checking changes across UI, service, and database layers.
+
+- **Google Gemini 3.1 Pro & Flash** helped shape high-level architecture and financial logic.
+- **Antigravity** supported workspace management, large refactors, and Docker optimization.
+- **Code Review Graph** kept structural relationships visible across repositories, services, API routes, and UI.
+
+Why this matters: expense apps are small enough to look simple, but they touch money, membership, permissions, audit history, and derived balances. Agentic development helped keep those concerns connected instead of treating each screen as an isolated UI task.
 
 ---
 
-## 🏛️ High-Level Architecture (HLD)
+## High-Level Architecture (HLD)
 
-The project follows a **Clean Architecture** approach, ensuring separation of concerns and high testability.
+The app follows a clean, layered architecture. UI components call API routes, API routes validate and authorize requests, services own business behavior, repositories isolate persistence, and domain modules handle pure financial calculations.
 
 ```mermaid
 graph TD
@@ -31,10 +34,12 @@ graph TD
     subgraph "Application Layer (API Routes)"
         Routes[API Endpoints]
         Validators[Zod Schemas]
+        Auth[Auth and Group Access Guards]
     end
 
     subgraph "Core Business Logic (Services)"
         ExpService[Expense Service]
+        GroupService[Group Service]
         SettService[Settlement Service]
         ScoreService[Leaderboard Service]
         Events[Event Bus]
@@ -43,7 +48,7 @@ graph TD
     subgraph "Data Access (Persistence)"
         Repos[Repositories]
         Drizzle[Drizzle ORM]
-        DB[(Neon PostgreSQL)]
+        DB[(PostgreSQL)]
     end
 
     subgraph "Integrations"
@@ -52,67 +57,99 @@ graph TD
 
     UI --> Routes
     Routes --> Validators
-    Routes --> ExpService
+    Routes --> Auth
+    Auth --> ExpService
+    Auth --> GroupService
     Routes --> SettService
     ExpService --> Repos
+    GroupService --> Repos
     SettService --> Repos
     Repos --> Drizzle
     Drizzle --> DB
     ExpService -.-> Events
+    GroupService -.-> Events
     Events -.-> ActivityLog[Activity Logs]
     ExpService --> Spotify
 ```
 
+Why this shape: balances and settlements are derived from multiple tables, so keeping calculations and persistence separate makes the math testable. API routes stay thin so authorization and validation are obvious at the boundary.
+
 ---
 
-## 💎 Features & Benefits
+## Features & Benefits
 
 ### 1. Financial Precision Engine
-- **The Problem**: Standard splitters often lose 1-2 paise due to floating-point division (e.g., ₹100 / 3).
-- **The Solution**: Our **Remainder Algorithm** ensures that the sum of splits *always* matches the total amount by intelligently assigning the fractional remainder.
-- **Benefit**: Accountants and precision-obsessed users can trust the math 100%.
+
+- **Problem:** naive splitters lose paise because decimal division rarely divides cleanly.
+- **Solution:** the remainder algorithm ensures split totals always match the original expense.
+- **Why it matters:** trust is the product. If the ledger is off by even a small amount, users stop trusting the app.
 
 ### 2. Multi-Strategy Splitting
-- **Options**: `Equal`, `Exact`, `Percentage`, `Exclude`, and `Adjustment`.
-- **Benefit**: Handles everything from simple dinners to complex rent splits where one person has a larger room.
 
-### 3. Min-Transaction Settlement Algorithm
-- **The Problem**: In a group of 5, you might have 10 messy debts.
-- **The Solution**: Uses a **Greedy Flow-based Algorithm** to simplify the debt web into the minimum number of payments.
-- **Benefit**: Reduces social friction by minimizing the number of transactions needed to settle up.
+- **Options:** `Equal`, `Exact`, `Percentage`, `Exclude`, and `Adjustment`.
+- **Why it matters:** real groups are messy. Rent, trips, shared groceries, and one-off reimbursements all need different split models.
 
-### 4. Social Integration (Spotify)
-- **Feature**: Attach a Spotify track to any expense.
-- **Benefit**: Turns a boring "Grocery bill" into a shared memory. "Remember that road trip where we played this song on loop?"
+### 3. Expense Editing and Deletion
 
-### 5. Leaderboard & Gamification
-- **Metric**: Ranks members based on spending and promptness in settling.
-- **Benefit**: Encourages positive financial behavior within the group.
+- **Feature:** users can edit expenses and delete an expense inside its group.
+- **Behavior:** deleting an expense soft-deletes it with `deleted_at`, so balances ignore it while historical deletion activity can still be recorded.
+- **Why it matters:** mistakes happen. Soft deletion protects the ledger from accidental data loss while keeping group totals accurate.
+
+### 4. Group Deletion
+
+- **Feature:** accepted group members can delete a group from the group detail screen after confirmation.
+- **Behavior:** the API verifies group membership, then deletes the group. PostgreSQL cascade rules remove memberships, expenses, splits, settlements, attachments, Spotify links, and activity logs tied to that group.
+- **Why it matters:** group deletion is intentionally destructive and explicit. Finished trips, test groups, and abandoned groups should not clutter the dashboard forever.
+
+### 5. Min-Transaction Settlement Algorithm
+
+- **Problem:** a group can have many cross-debts even when the final net balance is simple.
+- **Solution:** a greedy flow-based algorithm reduces the debt graph into fewer payments.
+- **Why it matters:** fewer payments means less social friction and fewer chances for someone to record the wrong settlement.
+
+### 6. Social Integration (Spotify)
+
+- **Feature:** attach a Spotify track to an expense.
+- **Why it matters:** shared spending is often tied to shared memories. This keeps the product useful without making the group ledger feel sterile.
+
+### 7. Leaderboard and Gamification
+
+- **Feature:** ranks members based on spending and settlement behavior.
+- **Why it matters:** a lightweight score can nudge healthier group behavior without turning settlements into nagging.
 
 ---
 
-## 🔄 Core Workflow
+## Core Workflow
 
 ### 1. Group Formation
-- **User A** creates a "Europe Trip" group.
-- System generates a unique `joinCode`.
-- **User B** & **User C** enter the code to join instantly.
+
+1. A user creates a group.
+2. The system generates a stable join code.
+3. Other users join with the code or receive invitations.
+
+Why this exists: join codes remove the need for manual member lookup during trips or shared events, while invitations still work when the creator knows the members in advance.
 
 ### 2. Expense Lifecycle
-- **Add Expense**: Enter amount, description, and category.
-- **Split Strategy**: Choose how to divide (e.g., User B pays 60%, User C pays 40%).
-- **Attachments**: Snap a photo of the receipt for proof.
-- **Spotify**: Add the "Theme Song" of the night.
+
+1. Add amount, payer, description, category, and split strategy.
+2. Optionally attach a receipt and Spotify track.
+3. Edit the expense when details are wrong.
+4. Delete the expense when it should no longer affect balances.
+
+Why this exists: expense data changes often. The app treats changes as first-class actions so the balance engine stays accurate without manual recalculation.
 
 ### 3. Debt Reconciliation
-- View the **Settlement Plan** generated by the engine.
-- **Payer** records a settlement in the app.
-- **Receiver** gets a notification and must **Confirm** the receipt of funds.
-- Balances are updated in real-time.
+
+1. View the generated settlement plan.
+2. A payer records a settlement.
+3. The receiver confirms receipt.
+4. Balances update after confirmation.
+
+Why this exists: confirmed settlement state prevents one person from marking debts resolved unilaterally.
 
 ---
 
-## 🗄️ Database Schema (LLD)
+## Database Schema (LLD)
 
 ```mermaid
 erDiagram
@@ -122,52 +159,118 @@ erDiagram
     USERS ||--o{ EXPENSES : pays
     EXPENSES ||--o{ EXPENSE_SPLITS : divided_into
     USERS ||--o{ EXPENSE_SPLITS : owes
-    EXPENSES ||--o| SPOTIFY_TRACKS : has
-    EXPENSES ||--o{ ATTACHMENTS : has
+    EXPENSES ||--o| EXPENSE_SPOTIFY_TRACKS : has
+    EXPENSES ||--o{ EXPENSE_ATTACHMENTS : has
     USERS ||--o{ SETTLEMENTS : sends
     USERS ||--o{ SETTLEMENTS : receives
     GROUPS ||--o{ ACTIVITY_LOGS : audits
 ```
 
+Why these relations: the schema keeps raw facts separate from derived views. Expenses and splits are stored as source data; balances and settlement plans are computed from that source instead of being duplicated.
+
+Deletion strategy:
+
+- Expenses use soft deletion so group history can record the action and balances can exclude deleted rows.
+- Groups use hard deletion with database cascades because a deleted group should disappear completely from dashboards and group-scoped tables.
+
 ---
 
-## 🛠️ Tech Stack Rationale
+## Tech Stack Rationale
 
-| Layer | Technology | Rationale | Benefit |
+| Layer | Technology | Why | Benefit |
 | :--- | :--- | :--- | :--- |
-| **Framework** | **Next.js 16** | Server-first architecture (RSC). | Minimal client-side JS, ultra-fast LCP. |
-| **ORM** | **Drizzle ORM** | SQL-first, zero-runtime overhead. | Type safety without sacrificing performance. |
-| **Database** | **PostgreSQL (Neon)** | Serverless Postgres with branching. | Instant dev environments and zero cost at rest. |
-| **Auth** | **NextAuth.js** | Industry-standard session management. | Secure OAuth and encrypted credentials. |
-| **Testing** | **tsx + pg-mem** | In-memory Postgres for tests. | Sub-second test execution without DB latency. |
-| **Deployment**| **Docker** | Containerized environment. | "Works on my machine" guaranteed across teams. |
+| Framework | Next.js 16 | Full-stack routing, API routes, and production standalone output. | One deployable app with a clean frontend/backend boundary. |
+| ORM | Drizzle ORM | SQL-first schema and type-safe queries. | Database code stays explicit and reviewable. |
+| Database | PostgreSQL / Neon | Relational constraints fit money, users, groups, and settlements. | Cascades, checks, and transactions protect data integrity. |
+| Auth | NextAuth.js | Session management is security-sensitive and should not be hand-rolled. | Standard authentication flow with server-side session access. |
+| Validation | Zod | API input must be checked before it reaches services. | Clear 400 responses and safer service contracts. |
+| Testing | `tsx --test` + `pg-mem` | Fast tests encourage frequent verification. | Domain logic can be tested without a live database. |
+| Deployment | Docker + Compose | Local production-like runs need app, database, and migrations together. | New developers can run the full stack with one command. |
 
 ---
 
-## 🚀 Development Workflow
+## Development Workflow
 
 ### Local Setup
-1. **Clone & Install**:
+
+1. Install dependencies:
+
    ```bash
-   git clone <repo-url>
    npm install
    ```
-2. **Environment**:
-   Set up `.env.local` with your Neon `DATABASE_URL` and NextAuth secrets.
-3. **Database Migration**:
+
+2. Create `.env.local` from `.env.example` and fill in:
+
+   ```bash
+   DATABASE_URL="postgresql://user:password@host/dbname?sslmode=require"
+   NEXTAUTH_URL="http://localhost:3000"
+   NEXTAUTH_SECRET="<32-byte-secret>"
+   ```
+
+3. Push the schema:
+
    ```bash
    npx drizzle-kit push
    ```
-4. **Run Tests**:
+
+4. Run tests:
+
    ```bash
    npm test
    ```
-5. **Start**:
+
+5. Start the app:
+
    ```bash
    npm run dev
    ```
 
+Why this workflow: schema push happens before the app starts so runtime failures are not hidden behind missing tables. Tests run before manual QA so split math and service contracts are checked quickly.
+
+### Docker Setup
+
+Run the full stack with:
+
+```bash
+docker compose up --build
+```
+
+Compose starts:
+
+- `db`: PostgreSQL 16 with a persistent `postgres-data` volume.
+- `migrate`: a one-shot Drizzle migration container that waits for Postgres to be healthy.
+- `app`: the production Next.js standalone server on `http://localhost:3000`.
+
+Why this setup: the app is not useful without its database schema. Running a migration service before the app keeps container startup deterministic and avoids "works locally, fails in Docker" drift.
+
+Useful Docker commands:
+
+```bash
+docker compose ps
+docker compose logs -f app
+docker compose down
+docker compose down -v
+```
+
+Use `docker compose down -v` only when you intentionally want to delete the local Postgres data volume.
+
 ---
 
-## 📜 License
-MIT © 2026 Abhay Bansal
+## Verification
+
+Common checks:
+
+```bash
+npm test
+npm run build
+docker compose config
+docker compose up --build
+```
+
+Why these checks: tests verify domain behavior, build verifies Next.js compilation and server output, compose config catches YAML/environment mistakes, and compose up verifies that the app, database, and migration flow work together.
+
+---
+
+## License
+
+MIT (c) 2026 Abhay Bansal

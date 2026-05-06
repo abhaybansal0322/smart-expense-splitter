@@ -145,29 +145,25 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
 }
 
 export async function deleteExpense(expenseId: string, groupId: string, userId?: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    const gId = groupId;
-    const [existing] = await tx.select().from(expensesTable).where(
-      and(eq(expensesTable.id, expenseId), eq(expensesTable.groupId, gId as any), isNull(expensesTable.deletedAt))
-    ).limit(1);
+  const [existing] = await db.select().from(expensesTable).where(
+    and(eq(expensesTable.id, expenseId), eq(expensesTable.groupId, groupId as any), isNull(expensesTable.deletedAt))
+  ).limit(1);
 
-    if (!existing) throw new Error('Expense not found');
+  if (!existing) throw new Error('Expense not found');
 
-    await tx.update(expensesTable)
-      .set({ deletedAt: new Date() })
-      .where(eq(expensesTable.id, expenseId));
+  await db.update(expensesTable)
+    .set({ deletedAt: new Date() })
+    .where(eq(expensesTable.id, expenseId));
 
-    if (userId) {
-      eventBus.emit(DomainEvent.EXPENSE_DELETED, {
-        userId,
-        groupId,
-        expenseId,
-        amount: Number(existing.amount),
-        description: existing.description,
-        tx
-      });
-    }
-  });
+  if (userId) {
+    eventBus.emit(DomainEvent.EXPENSE_DELETED, {
+      userId,
+      groupId,
+      expenseId,
+      amount: Number(existing.amount),
+      description: existing.description
+    });
+  }
 }
 
 export async function updateExpense(payload: UpdateExpensePayload, userId?: string): Promise<void> {

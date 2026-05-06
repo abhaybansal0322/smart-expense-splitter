@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getGroupById, inviteMemberToGroup } from '@/services/groupService';
+import { deleteGroup, getGroupById, inviteMemberToGroup } from '@/services/groupService';
 import { withGroupAccess } from '@/lib/apiHandler';
 import { z } from 'zod';
 
@@ -20,3 +20,8 @@ export const PATCH = withGroupAccess(async ({ req, groupId }) => {
   await inviteMemberToGroup(groupId, parsed.data.email);
   return NextResponse.json({ success: true, status: 'pending' });
 }, 'PATCH /api/groups/[id]');
+
+export const DELETE = withGroupAccess(async ({ groupId, userId }) => {
+  await deleteGroup(groupId, userId);
+  return NextResponse.json({ success: true });
+}, 'DELETE /api/groups/[id]');

@@ -21,6 +21,8 @@ export default function GroupPage() {
   const groupId = params.id as string;
   const { show, ToastContainer } = useToast();
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showDeleteGroup, setShowDeleteGroup] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(false);
 
   const {
     group, expenses, balances, leaderboard,
@@ -29,6 +31,21 @@ export default function GroupPage() {
     addMemberEmail, setAddMemberEmail, addingMember,
     fetchAll, handleAddMember, copyJoinCode,
   } = useGroupDetails(groupId, show);
+
+  const handleDeleteGroup = async () => {
+    setDeletingGroup(true);
+    try {
+      const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete group');
+      show('Group deleted', 'success');
+      router.push('/groups');
+    } catch (error) {
+      show(error instanceof Error ? error.message : 'Failed to delete group', 'error');
+      setDeletingGroup(false);
+      setShowDeleteGroup(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -79,7 +96,10 @@ export default function GroupPage() {
               <StatPill label="Settle Up" value={`${settlements.length} txn`} highlight={settlements.length > 0} />
             </div>
           </div>
-          <button className="btn-primary" onClick={() => setShowAddExpense(true)} style={{ padding: '12px 22px' }}>+ Add Expense</button>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button className="btn-secondary" onClick={() => setShowDeleteGroup(true)} style={{ padding: '12px 18px', color: 'var(--accent-danger)' }}>Delete Group</button>
+            <button className="btn-primary" onClick={() => setShowAddExpense(true)} style={{ padding: '12px 22px' }}>+ Add Expense</button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -107,6 +127,24 @@ export default function GroupPage() {
 
       {showAddExpense && (
         <AddExpenseModal groupId={groupId} members={members} onClose={() => setShowAddExpense(false)} onCreated={() => { setShowAddExpense(false); show('Expense added!', 'success'); fetchAll(); setTab('expenses'); }} />
+      )}
+      {showDeleteGroup && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !deletingGroup && setShowDeleteGroup(false)}>
+          <div className="modal-content" style={{ maxWidth: 420, padding: 24, textAlign: 'center' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Delete Group?</h3>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
+              This deletes the group and all of its expenses, settlements, invitations, attachments, and activity. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button className="btn-secondary" onClick={() => setShowDeleteGroup(false)} disabled={deletingGroup} style={{ flex: 1, justifyContent: 'center' }}>
+                Cancel
+              </button>
+              <button className="btn-danger" onClick={handleDeleteGroup} disabled={deletingGroup} style={{ flex: 1, justifyContent: 'center', background: 'rgba(248, 113, 113, 0.15)' }}>
+                {deletingGroup ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <ToastContainer />
     </>

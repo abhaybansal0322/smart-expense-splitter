@@ -17,6 +17,6 @@ test('group list and detail queries include persistent join codes', () => {
   const listQuery = serviceSource.slice(listQueryStart, detailQueryStart);
   const detailQuery = serviceSource.slice(detailQueryStart, membersQueryStart);
 
-  assert.match(listQuery, /g\.join_code/);
-  assert.match(detailQuery, /g\.join_code/);
+  assert.match(listQuery, /join_code:\s*g\.joinCode/);
+  assert.match(detailQuery, /join_code:\s*g\.joinCode/);
 });

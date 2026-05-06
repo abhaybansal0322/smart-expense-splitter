@@ -78,6 +78,22 @@ export async function joinGroupByCode(code: string, userId: string): Promise<Joi
   return db.transaction(async (tx) => joinGroupByCodeWithClient(tx, code, userId));
 }
 
+export async function deleteGroup(groupId: string, userId: string): Promise<void> {
+  const membership = await db.query.groupMembers.findFirst({
+    where: and(
+      eq(groupMembers.groupId, groupId),
+      eq(groupMembers.userId, userId),
+      eq(groupMembers.status, 'accepted')
+    )
+  });
+
+  if (!membership) {
+    throw new Error('Group not found');
+  }
+
+  await db.delete(groups).where(eq(groups.id, groupId));
+}
+
 export async function inviteMemberToGroup(groupId: string, email: string): Promise<void> {
   const user = await UserRepository.findByEmail(email);
   if (!user) throw new Error('No account found for that email');
