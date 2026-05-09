@@ -65,6 +65,7 @@ AGENTS.md
 
 # Tool Generated / Metadata
 .code-review-graph/
+.superpowers/
 
 # Temporary Scripts
 drop_columns.ts

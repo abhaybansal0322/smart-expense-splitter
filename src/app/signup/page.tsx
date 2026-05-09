@@ -40,7 +40,7 @@ export default function SignupPage() {
   };
 
   const handleGoogleSignUp = () => {
-    signIn('google', { callbackUrl: '/' });
+    signIn('google', { callbackUrl: '/dashboard' });
   };
 
   return (

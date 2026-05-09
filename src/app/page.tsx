@@ -1,107 +1,197 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Navbar } from '@/components/Navbar';
-import { CreateGroupModal } from '@/components/GroupComponents';
-import { useToast } from '@/components/Toast';
-import { useDashboard } from '@/hooks/useDashboard';
-import { InvitationPanel } from '@/features/dashboard/InvitationPanel';
-import { GroupCard } from '@/features/dashboard/GroupCard';
-import { StatsBar } from '@/features/dashboard/StatsBar';
+import { SplitkaroLogo } from '@/components/SplitkaroLogo';
 
-export default function DashboardPage() {
-  const [showCreate, setShowCreate] = useState(false);
-  const { show, ToastContainer } = useToast();
-  const router = useRouter();
+const people = [
+  { name: 'Aarav', color: '#28d989' },
+  { name: 'Nisha', color: '#ff8a5b' },
+  { name: 'Rohan', color: '#5fa8ff' },
+  { name: 'Meera', color: '#f5cf55' },
+];
 
-  const {
-    groups,
-    invitations,
-    loading,
-    updatingInvitation,
-    fetchDashboard,
-    respondToInvitation,
-  } = useDashboard(show);
+const billTemplates = [
+  { title: 'Cafe run', amount: 1860, paidBy: 'Nisha', note: '4 friends, snacks, coffee' },
+  { title: 'Goa stay', amount: 12400, paidBy: 'Aarav', note: '2 rooms, shared weekend' },
+  { title: 'Movie night', amount: 2680, paidBy: 'Meera', note: 'Tickets, popcorn, cab' },
+];
 
-  const totalPending = groups.reduce((s, g) => s + (g.pending_settlements ?? 0), 0);
-  const totalExpenses = groups.reduce((s, g) => s + (g.total_expenses ?? 0), 0);
+const flowOffsets = [18, 38, 59, 80];
+
+export default function LandingPage() {
+  const [activeBill, setActiveBill] = useState(0);
+  const [tipPercent, setTipPercent] = useState(8);
+  const [mode, setMode] = useState<'equal' | 'smart'>('equal');
+  const [settled, setSettled] = useState<string[]>(['Rohan']);
+
+  const bill = billTemplates[activeBill];
+  const total = Math.round(bill.amount * (1 + tipPercent / 100));
+  const perPerson = Math.round(total / people.length);
+  const smartSplit = [0.35, 0.25, 0.2, 0.2].map((ratio) => Math.round(total * ratio));
+
+  const rows = people.map((person, index) => ({
+    ...person,
+    amount: mode === 'equal' ? perPerson : smartSplit[index],
+    settled: settled.includes(person.name),
+  }));
+
+  const toggleSettled = (name: string) => {
+    setSettled((current) => (
+      current.includes(name)
+        ? current.filter((person) => person !== name)
+        : [...current, name]
+    ));
+  };
 
   return (
-    <>
-      <Navbar />
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }} className="animate-fade-in">
-          <div>
-            <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 8 }}>
-              Expense Dashboard
-            </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 15 }}>
-              Track and settle group expenses with zero friction
-            </p>
+    <main className="landing-page">
+      <nav className="landing-nav" aria-label="Landing navigation">
+        <SplitkaroLogo href="/" size="md" />
+        <div className="landing-nav-actions">
+          <Link href="/login" className="landing-link">Login</Link>
+          <Link href="/signup" className="landing-button landing-button-small">Start splitting</Link>
+        </div>
+      </nav>
+
+      <section className="landing-hero">
+        <div className="hero-copy">
+          <h1>Split bills before the group chat explodes.</h1>
+          <p>
+            splitkaro turns messy shared expenses into clean balances, quick settlements,
+            and group codes your friends can join in seconds.
+          </p>
+          <div className="hero-actions">
+            <Link href="/signup" className="landing-button">Start splitting</Link>
+            <Link href="/login" className="landing-button landing-button-ghost">Login</Link>
           </div>
-          <button className="btn-primary" onClick={() => setShowCreate(true)} style={{ fontSize: 15, padding: '12px 24px' }}>
-            + New Group
-          </button>
+          <div className="hero-proof" aria-label="Product highlights">
+            <span>Live balances</span>
+            <span>Join codes</span>
+            <span>Settlement tracking</span>
+          </div>
         </div>
 
-        <InvitationPanel
-          invitations={invitations}
-          updatingInvitation={updatingInvitation}
-          onRespond={respondToInvitation}
-        />
-
-        <StatsBar
-          groupsCount={groups.length}
-          totalExpenses={totalExpenses}
-          totalPending={totalPending}
-        />
-
-        {/* Groups grid */}
-        {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="glass-card" style={{ padding: 24, height: 180 }}>
-                <div className="skeleton" style={{ height: 20, width: '60%', marginBottom: 12 }} />
-                <div className="skeleton" style={{ height: 14, width: '40%', marginBottom: 24 }} />
-                <div className="skeleton" style={{ height: 14, width: '80%' }} />
-              </div>
-            ))}
-          </div>
-        ) : groups.length === 0 ? (
-          <div style={{
-            textAlign: 'center', padding: '80px 24px',
-            border: '1px dashed var(--border)', borderRadius: 20,
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🤝</div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>No groups yet</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Create a group to start splitting expenses with friends</p>
-            <button className="btn-primary" onClick={() => setShowCreate(true)}>
-              + Create First Group
+        <div className="split-lab" aria-label="Interactive bill split preview">
+          <div className="split-lab-header">
+            <div>
+              <span>Live split lab</span>
+              <strong>{bill.title}</strong>
+            </div>
+            <button className="mode-toggle" onClick={() => setMode(mode === 'equal' ? 'smart' : 'equal')}>
+              {mode === 'equal' ? 'Equal split' : 'Smart split'}
             </button>
           </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-            {groups.map((group) => (
-              <GroupCard key={group.id} group={group} />
+
+          <div className="bill-stage">
+            <div className="bill-card-main">
+              <span className="bill-label">Paid by {bill.paidBy}</span>
+              <strong>Rs {total.toLocaleString('en-IN')}</strong>
+              <p>{bill.note}</p>
+              <div className="tip-control">
+                <label htmlFor="tip">Tip {tipPercent}%</label>
+                <input
+                  id="tip"
+                  type="range"
+                  min="0"
+                  max="20"
+                  value={tipPercent}
+                  onChange={(event) => setTipPercent(Number(event.target.value))}
+                />
+              </div>
+            </div>
+
+            <div className="flow-field" aria-hidden="true">
+              {flowOffsets.map((offset, index) => (
+                <span
+                  key={offset}
+                  className={`flow-line flow-line-${index + 1}`}
+                  style={{ top: `${offset}%` }}
+                />
+              ))}
+            </div>
+
+            <div className="people-stack">
+              {rows.map((row) => (
+                <button
+                  type="button"
+                  key={row.name}
+                  className={`person-row ${row.settled ? 'person-row-settled' : ''}`}
+                  onClick={() => toggleSettled(row.name)}
+                >
+                  <span className="person-avatar" style={{ backgroundColor: row.color }}>
+                    {row.name[0]}
+                  </span>
+                  <span>
+                    <strong>{row.name}</strong>
+                    <small>{row.settled ? 'Settled' : 'Owes now'}</small>
+                  </span>
+                  <b>Rs {row.amount.toLocaleString('en-IN')}</b>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bill-tabs" role="tablist" aria-label="Choose sample expense">
+            {billTemplates.map((template, index) => (
+              <button
+                key={template.title}
+                type="button"
+                className={activeBill === index ? 'active' : ''}
+                onClick={() => setActiveBill(index)}
+              >
+                {template.title}
+              </button>
             ))}
           </div>
-        )}
-      </main>
+        </div>
+      </section>
 
-      {showCreate && (
-        <CreateGroupModal
-          onClose={() => setShowCreate(false)}
-          onCreated={(id) => {
-            setShowCreate(false);
-            show('Group created!', 'success');
-            fetchDashboard();
-            router.push(`/groups/${id}`);
-          }}
-        />
-      )}
-      <ToastContainer />
-    </>
+      <section className="landing-strip" aria-label="How splitkaro works">
+        <div>
+          <span className="strip-number">01</span>
+          <h2>Create a group</h2>
+          <p>Name the trip, flat, office lunch, or weekend plan.</p>
+        </div>
+        <div>
+          <span className="strip-number">02</span>
+          <h2>Add expenses</h2>
+          <p>Track who paid, who joined, and how each bill should split.</p>
+        </div>
+        <div>
+          <span className="strip-number">03</span>
+          <h2>Settle cleanly</h2>
+          <p>See exactly who owes what and close the loop without drama.</p>
+        </div>
+      </section>
+
+      <section className="landing-feature-band">
+        <div className="feature-copy">
+          <h2>Built for real friend groups, not perfect spreadsheets.</h2>
+          <p>
+            Use join codes for fast onboarding, activity history for memory,
+            and balance summaries that stay readable even when the group gets busy.
+          </p>
+        </div>
+        <div className="feature-grid">
+          <div>
+            <strong>Group codes</strong>
+            <span>Invite friends without sending long links.</span>
+          </div>
+          <div>
+            <strong>Fair balances</strong>
+            <span>Equal and custom splits stay easy to scan.</span>
+          </div>
+          <div>
+            <strong>Settlements</strong>
+            <span>Mark repayments and keep the group honest.</span>
+          </div>
+          <div>
+            <strong>History</strong>
+            <span>Every bill and settlement has a clear trail.</span>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

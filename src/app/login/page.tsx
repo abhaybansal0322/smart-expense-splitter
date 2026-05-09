@@ -62,13 +62,13 @@ function LoginForm() {
       setError(res.error === 'CredentialsSignin' ? 'Invalid email or password.' : res.error);
       setLoading(false);
     } else if (res?.ok) {
-      await router.push('/');
+      await router.push('/dashboard');
       router.refresh();
     }
   };
 
   const handleGoogleSignIn = () => {
-    signIn('google', { callbackUrl: '/' });
+    signIn('google', { callbackUrl: '/dashboard' });
   };
 
   return (

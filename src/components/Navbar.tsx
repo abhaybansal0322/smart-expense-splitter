@@ -3,11 +3,32 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
+import { SplitkaroLogo } from '@/components/SplitkaroLogo';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Dashboard', icon: '⊞' },
-  { href: '/groups', label: 'Groups', icon: '◈' },
+  { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
+  { href: '/groups', label: 'Groups', icon: 'groups' },
 ];
+
+function NavIcon({ icon }: { icon: string }) {
+  if (icon === 'groups') {
+    return (
+      <span className="nav-icon" aria-hidden="true">
+        <span />
+        <span />
+      </span>
+    );
+  }
+
+  return (
+    <span className="nav-icon nav-icon-grid" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
 
 export function Navbar() {
   const pathname = usePathname();
@@ -35,33 +56,11 @@ export function Navbar() {
           height: 60,
         }}
       >
-        {/* Logo */}
-        <Link href="/" style={{ textDecoration: 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                background: 'var(--gradient-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 16,
-              }}
-            >
-              ₹
-            </div>
-            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-              SplitSmart
-            </span>
-          </div>
-        </Link>
+        <SplitkaroLogo href="/" size="sm" />
 
-        {/* Nav links */}
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {NAV_ITEMS.map((item) => {
-            const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.href}
@@ -80,7 +79,7 @@ export function Navbar() {
                   transition: 'all 0.2s',
                 }}
               >
-                <span>{item.icon}</span>
+                <NavIcon icon={item.icon} />
                 {item.label}
               </Link>
             );
