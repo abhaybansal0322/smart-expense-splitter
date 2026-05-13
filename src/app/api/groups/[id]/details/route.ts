@@ -4,7 +4,7 @@ import { getExpensesByGroup } from '@/services/expenseService';
 import { computeGroupBalances, minimizeTransactions } from '@/services/settlementService';
 import { getGroupLeaderboard } from '@/services/leaderboardService';
 import { db } from '@/db/client';
-import { settlements, users } from '@/db/schema';
+import { settlements } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getAuthSession } from '@/lib/auth';
 import { logger } from '@/lib/logger';

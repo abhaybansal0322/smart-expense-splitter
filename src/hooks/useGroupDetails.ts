@@ -63,11 +63,19 @@ export function useGroupDetails(groupId: string, showToast: (msg: string, type: 
   }, [groupId, showToast]);
 
   useEffect(() => {
-    if (groupId) void fetchAll();
+    if (!groupId) return;
+    const timeout = window.setTimeout(() => {
+      void fetchAll();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [groupId, fetchAll]);
 
   useEffect(() => {
-    if (tab === 'activity') void fetchActivity();
+    if (tab !== 'activity') return;
+    const timeout = window.setTimeout(() => {
+      void fetchActivity();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [tab, fetchActivity]);
 
   const handleAddMember = async () => {

@@ -177,12 +177,80 @@ export interface ExpenseWithDetails extends Expense {
 
 export interface Activity {
   id: string;
-  action: 'EXPENSE_CREATED' | 'EXPENSE_UPDATED' | 'EXPENSE_DELETED' | 'SETTLEMENT_CREATED';
-  entity_type: 'expense' | 'settlement';
+  action:
+    | 'EXPENSE_CREATED'
+    | 'EXPENSE_UPDATED'
+    | 'EXPENSE_DELETED'
+    | 'SETTLEMENT_CREATED'
+    | 'SETTLEMENT_CONFIRMED'
+    | 'GROUP_CREATED'
+    | 'MEMBER_JOINED';
+  entity_type: 'expense' | 'settlement' | 'group' | 'member';
   metadata: Record<string, unknown>;
   created_at: string;
   user: {
     id: string;
     name: string;
   };
+}
+
+export interface DashboardChartDatum {
+  label: string;
+  amount: number;
+  count: number;
+}
+
+export interface DashboardAnalytics {
+  byCategory: DashboardChartDatum[];
+  byPayer: DashboardChartDatum[];
+  byDate: DashboardChartDatum[];
+  byMember: DashboardChartDatum[];
+  byMonth: DashboardChartDatum[];
+}
+
+export interface DashboardGlobalSummary {
+  totalYouOwe: number;
+  totalOwedToYou: number;
+  pendingConfirmations: number;
+  pendingToConfirm: number;
+  pendingAwaitingOthers: number;
+  biggestActiveGroup: {
+    id: string;
+    name: string;
+    totalExpenses: number;
+  } | null;
+}
+
+export interface DashboardUpcomingDue {
+  id: string;
+  group_id: string;
+  group_name: string;
+  personName: string;
+  amount: number;
+  direction: 'incoming' | 'outgoing';
+  daysPending: number;
+  created_at: string;
+}
+
+export interface DashboardNotification {
+  id: string;
+  kind: 'invitation' | 'expense' | 'settlement' | 'member' | 'group';
+  title: string;
+  detail: string;
+  group_id?: string;
+  group_name?: string;
+  created_at: string;
+}
+
+export interface DashboardActivity extends Activity {
+  group_id: string;
+  group_name: string;
+}
+
+export interface DashboardInsights {
+  summary: DashboardGlobalSummary;
+  analytics: DashboardAnalytics;
+  upcomingDues: DashboardUpcomingDue[];
+  notifications: DashboardNotification[];
+  recentActivity: DashboardActivity[];
 }

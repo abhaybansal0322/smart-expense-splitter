@@ -1,6 +1,6 @@
 'use client';
 
-import { formatIndianCurrency, formatIndianNumberCompact } from '@/lib/formatCurrency';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 interface StatsBarProps {
   groupsCount: number;

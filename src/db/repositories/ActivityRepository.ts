@@ -2,6 +2,12 @@ import { db } from '../client';
 import { activityLogs } from '../schema';
 import { eq, desc } from 'drizzle-orm';
 
+export type ActivityWriteClient = {
+  insert: (table: typeof activityLogs) => {
+    values: (data: typeof activityLogs.$inferInsert) => unknown;
+  };
+};
+
 export class ActivityRepository {
   static async findByGroup(groupId: string, limit = 50) {
     return db.query.activityLogs.findMany({
@@ -19,7 +25,7 @@ export class ActivityRepository {
     });
   }
 
-  static async create(data: typeof activityLogs.$inferInsert, tx?: any) {
+  static async create(data: typeof activityLogs.$inferInsert, tx?: ActivityWriteClient) {
     const client = tx || db;
     await client.insert(activityLogs).values(data);
   }

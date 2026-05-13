@@ -9,6 +9,11 @@ import { useDashboard } from '@/hooks/useDashboard';
 import { InvitationPanel } from '@/features/dashboard/InvitationPanel';
 import { GroupCard } from '@/features/dashboard/GroupCard';
 import { StatsBar } from '@/features/dashboard/StatsBar';
+import {
+  AnalyticsPanel,
+  DashboardUpdatesTabs,
+  GlobalSummaryPanel,
+} from '@/features/dashboard/DashboardInsights';
 
 export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
@@ -18,6 +23,7 @@ export default function DashboardPage() {
   const {
     groups,
     invitations,
+    insights,
     loading,
     updatingInvitation,
     fetchDashboard,
@@ -56,6 +62,18 @@ export default function DashboardPage() {
           totalExpenses={totalExpenses}
           totalPending={totalPending}
         />
+
+        {!loading && (
+          <>
+            <GlobalSummaryPanel summary={insights?.summary ?? null} />
+            <AnalyticsPanel analytics={insights?.analytics ?? null} />
+            <DashboardUpdatesTabs
+              upcomingDues={insights?.upcomingDues ?? []}
+              notifications={insights?.notifications ?? []}
+              recentActivity={insights?.recentActivity ?? []}
+            />
+          </>
+        )}
 
         {loading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>

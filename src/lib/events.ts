@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import type { ActivityWriteClient } from '@/db/repositories/ActivityRepository';
 
 export enum DomainEvent {
   EXPENSE_CREATED = 'EXPENSE_CREATED',
@@ -17,7 +18,7 @@ export interface DomainEventPayloads {
     expenseId: string;
     amount: number;
     description: string;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
   [DomainEvent.EXPENSE_UPDATED]: {
     userId: string;
@@ -25,7 +26,7 @@ export interface DomainEventPayloads {
     expenseId: string;
     oldAmount: number;
     newAmount: number;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
   [DomainEvent.EXPENSE_DELETED]: {
     userId: string;
@@ -33,7 +34,7 @@ export interface DomainEventPayloads {
     expenseId: string;
     amount: number;
     description: string;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
   [DomainEvent.SETTLEMENT_CREATED]: {
     userId: string;
@@ -42,7 +43,7 @@ export interface DomainEventPayloads {
     amount: number;
     fromUser: string;
     toUser: string;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
   [DomainEvent.SETTLEMENT_CONFIRMED]: {
     userId: string;
@@ -51,18 +52,18 @@ export interface DomainEventPayloads {
     amount: number;
     fromUser: string;
     toUser: string;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
   [DomainEvent.GROUP_CREATED]: {
     userId: string;
     groupId: string;
     name: string;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
   [DomainEvent.MEMBER_JOINED]: {
     userId: string;
     groupId: string;
-    tx?: any;
+    tx?: ActivityWriteClient;
   };
 }
 

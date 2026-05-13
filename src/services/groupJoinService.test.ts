@@ -7,6 +7,7 @@ import {
   joinGroupByCodeWithClient,
   normalizeJoinCode,
 } from './groupJoinService';
+import type { GroupJoinClient } from './groupJoinService';
 
 function sqlValue(value: unknown): string {
   if (value === null || value === undefined) return 'NULL';
@@ -23,28 +24,33 @@ function bindParams(text: string, params?: unknown[]): string {
   return sql;
 }
 
-function extractDrizzleParams(where: any): any[] {
-  if (!where) return [];
-  const params: any[] = [];
-  const visited = new Set();
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
 
-  function walk(obj: any) {
+function extractDrizzleParams(where: unknown): unknown[] {
+  if (!where) return [];
+  const params: unknown[] = [];
+  const visited = new Set<unknown>();
+
+  function walk(obj: unknown) {
     if (!obj || typeof obj !== 'object' || visited.has(obj)) return;
     visited.add(obj);
+    const record = asRecord(obj);
 
-    if (obj.constructor?.name === 'Param' && 'value' in obj) {
-      params.push(obj.value);
+    if ((obj as { constructor?: { name?: string } }).constructor?.name === 'Param' && 'value' in record) {
+      params.push(record.value);
       return;
     }
 
-    const chunks = obj.query || obj.queryChunks || obj.terms;
+    const chunks = record.query || record.queryChunks || record.terms;
     if (Array.isArray(chunks)) {
       for (const chunk of chunks) {
         walk(chunk);
       }
-    } else if (obj.left || obj.right) {
-      walk(obj.left);
-      walk(obj.right);
+    } else if (record.left || record.right) {
+      walk(record.left);
+      walk(record.right);
     }
   }
 
@@ -52,7 +58,7 @@ function extractDrizzleParams(where: any): any[] {
   return params;
 }
 
-function extractDrizzleParam(where: any): any {
+function extractDrizzleParam(where: unknown): unknown {
   const params = extractDrizzleParams(where);
   return params.length > 0 ? params[0] : null;
 }
@@ -89,37 +95,55 @@ function createClient() {
       ('u2', 'g2', 'pending');
   `);
 
+  type InsertData = {
+    userId?: string;
+    groupId?: string;
+    status?: string;
+    action?: string;
+  };
+
   const client = {
     query: {
       groups: {
-        findFirst: async ({ where }: any) => {
+        findFirst: async ({ where }: { where?: unknown }) => {
           // Simplified mock: find by joinCode
           const val = extractDrizzleParam(where);
           const sql = bindParams('SELECT id FROM groups WHERE join_code = $1', [val]);
           const result = db.public.query(sql);
-          return result.rows[0] ?? null;
+          const row = result.rows[0] as { id: string } | undefined;
+          return row ?? null;
         }
       },
       groupMembers: {
-        findFirst: async ({ where }: any) => {
+        findFirst: async ({ where }: { where?: unknown }) => {
           // Simplified mock: find by groupId and userId
           const params = extractDrizzleParams(where);
           const sql = bindParams('SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2', params);
           const result = db.public.query(sql);
-          return result.rows[0] ?? null;
+          const row = result.rows[0] as { status: string } | undefined;
+          return row ?? null;
         }
       }
     },
-    insert: (table: any) => ({
-      values: (data: any) => ({
-        onConflictDoUpdate: () => {
-          const sql = bindParams('INSERT INTO group_members (user_id, group_id, status) VALUES ($1, $2, $3) ON CONFLICT (user_id, group_id) DO UPDATE SET status = EXCLUDED.status', [data.userId, data.groupId, data.status]);
-          db.public.none(sql);
-          return Promise.resolve();
-        }
-      })
-    })
-  };
+    insert: (_table: unknown) => {
+      void _table;
+      return {
+        values: (data: InsertData) => ({
+          onConflictDoUpdate: () => {
+            if (data.action) {
+              return Promise.resolve();
+            }
+            if (!data.userId || !data.groupId || !data.status) {
+              throw new Error('Invalid group member insert');
+            }
+            const sql = bindParams('INSERT INTO group_members (user_id, group_id, status) VALUES ($1, $2, $3) ON CONFLICT (user_id, group_id) DO UPDATE SET status = EXCLUDED.status', [data.userId, data.groupId, data.status]);
+            db.public.none(sql);
+            return Promise.resolve();
+          }
+        })
+      };
+    }
+  } as unknown as GroupJoinClient;
 
   return { db, client };
 }

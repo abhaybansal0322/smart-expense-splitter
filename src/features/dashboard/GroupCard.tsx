@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Avatar } from '@/components/Avatar';
 import { GroupWithDetails } from '@/lib/types';
-import { formatIndianCurrency, formatIndianNumberCompact } from '@/lib/formatCurrency';
+import { formatIndianNumberCompact } from '@/lib/formatCurrency';
 
 export function GroupCard({ group }: { group: GroupWithDetails }) {
   const members = Array.isArray(group.members) ? group.members : [];

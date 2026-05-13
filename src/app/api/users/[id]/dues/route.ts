@@ -5,6 +5,18 @@ import { getAuthSession } from '@/lib/auth';
 
 type Params = { params: Promise<{ id: string }> };
 
+type DueRow = {
+  expense_id: string;
+  description: string;
+  amount: number;
+  share: number;
+  paid_by_name: string;
+  days_overdue: number;
+  created_at: Date;
+  group_name: string;
+  group_id: string;
+};
+
 // GET pending dues for a user (expenses older than X days unpaid)
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -45,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
        ORDER BY e.created_at ASC
     `);
 
-    const rows = (result.rows || result) as any[];
+    const rows = result.rows as DueRow[];
     return NextResponse.json({ dues: rows, overdueDays: OVERDUE_DAYS });
   } catch (error) {
     console.error('GET /api/users/[id]/dues error:', error);

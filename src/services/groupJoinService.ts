@@ -22,6 +22,8 @@ export class GroupJoinError extends Error {
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_LENGTH = 6;
 
+export type GroupJoinClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export function normalizeJoinCode(code: string): string {
   return code.trim().toUpperCase().replace(/[\s-]+/g, '');
 }
@@ -35,7 +37,7 @@ export function generateJoinCode(): string {
 }
 
 export async function createUniqueJoinCode(
-  tx?: any,
+  tx?: Pick<GroupJoinClient, 'query'>,
   nextCode: () => string = generateJoinCode
 ): Promise<string> {
   const client = tx || db;
@@ -55,7 +57,7 @@ export async function createUniqueJoinCode(
 
 // This can be used inside or outside a transaction by passing tx
 export async function joinGroupByCodeWithClient(
-  tx: any,
+  tx: GroupJoinClient,
   code: string,
   userId: string
 ): Promise<JoinedGroup> {

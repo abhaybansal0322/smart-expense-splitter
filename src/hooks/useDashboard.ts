@@ -1,27 +1,31 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { GroupInvitation, GroupWithDetails } from '@/lib/types';
+import { DashboardInsights, GroupInvitation, GroupWithDetails } from '@/lib/types';
 
 export function useDashboard(showToast: (msg: string, type: 'success' | 'error') => void) {
   const [groups, setGroups] = useState<GroupWithDetails[]>([]);
   const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
+  const [insights, setInsights] = useState<DashboardInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingInvitation, setUpdatingInvitation] = useState<string | null>(null);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const [groupsRes, invitationsRes] = await Promise.all([
+      const [groupsRes, invitationsRes, insightsRes] = await Promise.all([
         fetch('/api/groups'),
         fetch('/api/group-invitations'),
+        fetch('/api/dashboard/insights'),
       ]);
-      const [groupsData, invitationsData] = await Promise.all([
+      const [groupsData, invitationsData, insightsData] = await Promise.all([
         groupsRes.json(),
         invitationsRes.json(),
+        insightsRes.json(),
       ]);
       setGroups(groupsData.groups ?? []);
       setInvitations(invitationsData.invitations ?? []);
+      setInsights(insightsData.insights ?? null);
     } catch {
       showToast('Failed to load dashboard', 'error');
     } finally {
@@ -30,7 +34,10 @@ export function useDashboard(showToast: (msg: string, type: 'success' | 'error')
   }, [showToast]);
 
   useEffect(() => {
-    fetchDashboard();
+    const timeout = window.setTimeout(() => {
+      void fetchDashboard();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [fetchDashboard]);
 
   const respondToInvitation = async (groupId: string, action: 'accept' | 'decline') => {
@@ -55,6 +62,7 @@ export function useDashboard(showToast: (msg: string, type: 'success' | 'error')
   return {
     groups,
     invitations,
+    insights,
     loading,
     updatingInvitation,
     fetchDashboard,

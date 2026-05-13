@@ -1,5 +1,6 @@
 import { db } from '@/db/client';
 import { activityLogs } from '@/db/schema';
+import type { ActivityWriteClient } from '@/db/repositories/ActivityRepository';
 
 export interface LogActivityParams {
   userId: string;
@@ -12,7 +13,7 @@ export interface LogActivityParams {
 
 export async function logActivity(
   params: LogActivityParams,
-  tx?: any
+  tx?: ActivityWriteClient
 ): Promise<void> {
   const { userId, groupId, action, entityType, entityId, metadata } = params;
   

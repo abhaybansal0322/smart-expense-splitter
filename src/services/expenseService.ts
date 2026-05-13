@@ -11,8 +11,10 @@ import { computeSplits } from '@/domain/splitCalculators';
 
 export { computeSplits } from '@/domain/splitCalculators';
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 async function verifyUsersAreGroupMembers(
-  tx: any,
+  tx: DbTransaction,
   groupId: string,
   userIds: string[]
 ): Promise<void> {
@@ -146,7 +148,7 @@ export async function getExpensesByGroup(groupId: string): Promise<ExpenseWithDe
 
 export async function deleteExpense(expenseId: string, groupId: string, userId?: string): Promise<void> {
   const [existing] = await db.select().from(expensesTable).where(
-    and(eq(expensesTable.id, expenseId), eq(expensesTable.groupId, groupId as any), isNull(expensesTable.deletedAt))
+    and(eq(expensesTable.id, expenseId), eq(expensesTable.groupId, groupId), isNull(expensesTable.deletedAt))
   ).limit(1);
 
   if (!existing) throw new Error('Expense not found');
@@ -170,8 +172,9 @@ export async function updateExpense(payload: UpdateExpensePayload, userId?: stri
   return db.transaction(async (tx) => {
     const eId = payload.expense_id;
     const gId = payload.group_id;
+    if (!gId) throw new Error('Group id is required');
     const [existing] = await tx.select().from(expensesTable).where(
-      and(eq(expensesTable.id, eId), eq(expensesTable.groupId, gId as any), isNull(expensesTable.deletedAt))
+      and(eq(expensesTable.id, eId), eq(expensesTable.groupId, gId), isNull(expensesTable.deletedAt))
     ).limit(1);
 
     if (!existing) throw new Error('Expense not found');

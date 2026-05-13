@@ -1,6 +1,6 @@
 import { db } from '@/db/client';
 import { settlements } from '@/db/schema';
-import { sql, desc, eq } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { UserBalance, SettlementTransaction } from '@/lib/types';
 import { minimizeTransactions } from '@/domain/balanceCalculator';
 import { eventBus, DomainEvent } from '@/lib/events';
@@ -61,8 +61,7 @@ export async function computeGroupBalances(groupId: string): Promise<UserBalance
      ORDER BY m.name
   `);
 
-  const rows = (result.rows || result) as any[];
-  return rows as unknown as UserBalance[];
+  return result.rows as unknown as UserBalance[];
 }
 
 export async function getSettlementPlan(groupId: string): Promise<SettlementTransaction[]> {

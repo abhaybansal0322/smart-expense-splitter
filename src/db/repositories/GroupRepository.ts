@@ -1,6 +1,6 @@
 import { db } from '../client';
 import { groups, groupMembers, users } from '../schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 export class GroupRepository {
   static async findById(id: string) {

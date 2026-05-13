@@ -2,7 +2,7 @@
 
 import { Avatar } from '@/components/Avatar';
 import { Activity } from '@/lib/types';
-import { formatIndianCurrency, formatIndianNumberCompact, formatRelativeTime } from '@/lib/formatCurrency';
+import { formatIndianNumberCompact, formatRelativeTime } from '@/lib/formatCurrency';
 
 export function ActivityTab({ activity, loading }: { activity: Activity[]; loading: boolean }) {
   if (loading) {

@@ -8,7 +8,6 @@ import {
   pgEnum, 
   integer, 
   jsonb, 
-  uniqueIndex, 
   check, 
   primaryKey,
   unique

@@ -42,6 +42,7 @@ graph TD
         GroupService[Group Service]
         SettService[Settlement Service]
         ScoreService[Leaderboard Service]
+        DashService[Dashboard Insights Service]
         Events[Event Bus]
     end
 
@@ -61,9 +62,12 @@ graph TD
     Auth --> ExpService
     Auth --> GroupService
     Routes --> SettService
+    Routes --> DashService
     ExpService --> Repos
     GroupService --> Repos
     SettService --> Repos
+    DashService --> SettService
+    DashService --> Repos
     Repos --> Drizzle
     Drizzle --> DB
     ExpService -.-> Events
@@ -117,6 +121,24 @@ Why this shape: balances and settlements are derived from multiple tables, so ke
 - **Feature:** ranks members based on spending and settlement behavior.
 - **Why it matters:** a lightweight score can nudge healthier group behavior without turning settlements into nagging.
 
+### 8. Cross-Group Dashboard Intelligence
+
+- **Feature:** the dashboard now has a global summary for total owed, total receivable, pending confirmations, and the biggest active group.
+- **Behavior:** `/api/dashboard/insights` builds a user-scoped read model from groups, expenses, balances, settlements, invitations, and activity logs.
+- **Why it matters:** users should not have to open every group to understand their overall money position.
+
+### 9. Analytics by Category, Payer, Date, Member, and Month
+
+- **Feature:** dashboard analytics show spending grouped by category, payer, daily timeline, member share, and month.
+- **Behavior:** analytics are derived from existing expenses and splits instead of being stored as separate totals.
+- **Why it matters:** dashboards are useful only when they explain patterns, not just raw totals. This helps users see where money is going and who is driving group spend.
+
+### 10. Notifications, Global Activity, and Reminders
+
+- **Feature:** the dashboard includes a notifications center, recent activity across all groups, and upcoming dues with lightweight local reminders.
+- **Behavior:** invitations, new expenses, settlement events, and member activity are normalized into dashboard notifications. Pending settlement records become reminder-ready due items.
+- **Why it matters:** group expenses are collaborative. Users need one place to notice what changed, what needs confirmation, and what payments are still waiting.
+
 ---
 
 ## Core Workflow
@@ -147,6 +169,15 @@ Why this exists: expense data changes often. The app treats changes as first-cla
 
 Why this exists: confirmed settlement state prevents one person from marking debts resolved unilaterally.
 
+### 4. Dashboard Review
+
+1. Open the dashboard to see all active groups.
+2. Review global totals: what you owe, what others owe you, and pending confirmations.
+3. Use analytics to inspect spend by category, payer, date, member, and month.
+4. Check notifications, upcoming dues, reminders, and recent activity without opening each group.
+
+Why this exists: cross-group state is hard to reason about from individual group pages. The dashboard gives users a single operational view of money, actions, and history.
+
 ---
 
 ## Database Schema (LLD)
@@ -168,6 +199,12 @@ erDiagram
 
 Why these relations: the schema keeps raw facts separate from derived views. Expenses and splits are stored as source data; balances and settlement plans are computed from that source instead of being duplicated.
 
+Dashboard strategy:
+
+- Dashboard summaries, charts, notifications, dues, and global activity are computed read models.
+- The app does not duplicate analytics tables. It queries the source tables and formats the result for the dashboard.
+- Reminder state is intentionally lightweight and local to the browser until the product needs server-side scheduled notifications.
+
 Deletion strategy:
 
 - Expenses use soft deletion so group history can record the action and balances can exclude deleted rows.
@@ -185,6 +222,7 @@ Deletion strategy:
 | Auth | NextAuth.js | Session management is security-sensitive and should not be hand-rolled. | Standard authentication flow with server-side session access. |
 | Validation | Zod | API input must be checked before it reaches services. | Clear 400 responses and safer service contracts. |
 | Testing | `tsx --test` + `pg-mem` | Fast tests encourage frequent verification. | Domain logic can be tested without a live database. |
+| Quality Gates | ESLint + TypeScript + Next build | Dashboard and service changes should fail early when types, hooks, or lint rules drift. | Keeps UI, API, and service contracts maintainable as the app grows. |
 | Deployment | Docker + Compose | Local production-like runs need app, database, and migrations together. | New developers can run the full stack with one command. |
 
 ---
@@ -213,9 +251,10 @@ Deletion strategy:
    npx drizzle-kit push
    ```
 
-4. Run tests:
+4. Run lint and tests:
 
    ```bash
+   npm run lint
    npm test
    ```
 
@@ -261,13 +300,14 @@ Use `docker compose down -v` only when you intentionally want to delete the loca
 Common checks:
 
 ```bash
+npm run lint
 npm test
 npm run build
 docker compose config
 docker compose up --build
 ```
 
-Why these checks: tests verify domain behavior, build verifies Next.js compilation and server output, compose config catches YAML/environment mistakes, and compose up verifies that the app, database, and migration flow work together.
+Why these checks: lint verifies code quality and React hook constraints, tests verify domain behavior, build verifies Next.js compilation and server output, compose config catches YAML/environment mistakes, and compose up verifies that the app, database, and migration flow work together.
 
 ---
 
